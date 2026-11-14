@@ -314,12 +314,13 @@ export default function HirayaPage() {
                     {m.parts.map((part, i) => {
                       if (part.type === "text") return <Markdown key={i}>{part.text}</Markdown>;
                       if (part.type.startsWith("tool-")) {
-                        const t = part as { state?: string; input?: { fileName?: string } };
+                        const t = part as { state?: string; input?: { fileName?: string; filePath?: string } };
                         const done = t.state === "output-available";
+                        const actionName = t.input?.filePath ? `Reading ${t.input.filePath}` : t.input?.fileName ? `Updating ${t.input?.fileName}` : "Checking codebase";
                         return (
                           <div key={i} className="my-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 font-mono text-[11px] text-fg-muted">
                             {done ? <Check className="size-3 text-emerald-400" /> : <Loader2 className="size-3 animate-spin" />}
-                            {done ? "Updated" : "Updating"} {t.input?.fileName ?? "project memory"}
+                            {done ? `Completed: ${actionName}` : `Running: ${actionName}…`}
                           </div>
                         );
                       }

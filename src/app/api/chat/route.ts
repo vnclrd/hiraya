@@ -3,6 +3,8 @@ import { z } from "zod";
 import { HIRAYA_PERSONAS } from "@/config/personas";
 import { readProjectMarkdown, appendProjectMarkdown } from "@/lib/markdown-fs";
 import { getFallbackChain, isRateLimitError } from "@/lib/llm-router";
+import fs from 'fs/promises';
+import path from 'path';
 
 export async function POST(req: Request) {
   const { messages, personaId = "violet", projectSlug = "sample-project" } = await req.json();
@@ -10,7 +12,6 @@ export async function POST(req: Request) {
   const persona = HIRAYA_PERSONAS[personaId] || HIRAYA_PERSONAS.violet;
   const rawMarkdown = await readProjectMarkdown(projectSlug);
 
-  // OPTIMIZATION: Truncate large context files to keep time-to-first-token near zero
   const trimmedContext = rawMarkdown.context.length > 1500 
     ? rawMarkdown.context.slice(0, 1500) + "\n...[truncated for speed]..." 
     : rawMarkdown.context;
@@ -19,7 +20,6 @@ export async function POST(req: Request) {
     ? rawMarkdown.progress.slice(0, 1500) + "\n...[truncated for speed]..." 
     : rawMarkdown.progress;
 
-  // Sliding window: keep last 15 messages to prevent heavy token payload spikes
   const trimmedMessages = messages.slice(-15);
   const modelMessages = await convertToModelMessages(trimmedMessages);
 
@@ -32,7 +32,9 @@ ${trimmedContext}
 --- PROGRESS.md (Summary) ---
 ${trimmedProgress}
 
-INSTRUCTION: Whenever the user completes a task, makes an architectural decision, or asks you to log progress/context, call the 'updateMarkdownFile' tool immediately so the local .md files stay up to date.`;
+INSTRUCTION: You have access to tools to read files and list directories inside the active codebase. 
+- If the user asks for a file and you are unsure of its exact path, ALWAYS call 'listProjectFiles' first (e.g., check '' or 'src') to locate it.
+- Once you have the correct relative path, call 'readProjectFile' to get the code and present it to the user.`;
 
   const candidates = getFallbackChain(persona.preferredModel);
 
@@ -43,7 +45,7 @@ INSTRUCTION: Whenever the user completes a task, makes an architectural decision
         model: candidate.model,
         system: systemPrompt,
         messages: modelMessages,
-        stopWhen: stepCountIs(3),
+        stopWhen: stepCountIs(12), // Allows multi-step tool calls (e.g., list files then read a file)
         tools: {
           updateMarkdownFile: tool({
             description: "Append a progress update to PROGRESS.md or a new spec/decision to CONTEXT.md",
@@ -53,6 +55,50 @@ INSTRUCTION: Whenever the user completes a task, makes an architectural decision
             }),
             execute: async ({ fileName, entry }) => {
               return await appendProjectMarkdown(projectSlug, fileName, entry);
+            },
+          }),
+
+          // Dynamic tool to list files inside whichever project slug is active
+          listProjectFiles: tool({
+            description: `List files and directories inside the ${projectSlug} repository. Use this to find where components or files are located.`,
+            inputSchema: z.object({
+              subDirectory: z.string().optional().describe("Subdirectory path relative to project root, e.g. '' for root, 'src', or 'src/components'"),
+            }),
+            execute: async ({ subDirectory = "" }) => {
+              try {
+                const projectRoot = path.resolve(process.cwd(), "..", projectSlug);
+                const targetDir = path.join(projectRoot, subDirectory);
+                const entries = await fs.readdir(targetDir, { withFileTypes: true });
+                return entries
+                  .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '.next')
+                  .map(e => `${e.isDirectory() ? '[DIR]' : '[FILE]'} ${e.name}`)
+                  .join("\n");
+              } catch (err: any) {
+                return `Error listing directory: ${err.message}`;
+              }
+            },
+          }),
+
+          // Dynamic tool to read any file from whichever project slug is active
+          readProjectFile: tool({
+            description: `Read the contents of any file in the ${projectSlug} repository. You must provide the correct relative path (e.g. 'src/components/AppHeader.tsx').`,
+            inputSchema: z.object({
+              filePath: z.string().describe("Relative path from project root, e.g. 'src/components/AppHeader.tsx'"),
+            }),
+            execute: async ({ filePath }) => {
+              try {
+                const projectRoot = path.resolve(process.cwd(), "..", projectSlug);
+                const safePath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+                const fullPath = path.join(projectRoot, safePath);
+                const content = await fs.readFile(fullPath, "utf-8");
+                
+                if (content.length > 10000) {
+                  return content.slice(0, 10000) + "\n\n...[file truncated due to length]...";
+                }
+                return content;
+              } catch (err: any) {
+                return `Error reading file at '${filePath}': ${err.message}. Try listing the directory first to find the correct path.`;
+              }
             },
           }),
         },
