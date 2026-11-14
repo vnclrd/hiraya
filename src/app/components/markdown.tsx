@@ -2,28 +2,41 @@
 
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import remarkGfm from "remark-gfm"; // npm i remark-gfm  (tables + task lists)
 import { Check, FileCode, ExternalLink } from "lucide-react";
 
-// Claude-style Artifact Card with interactive selection
-function CodeArtifactCard({ lang, code }: { lang: string; code: string }) {
-  // Infer smart filename from code content or first line
-  let inferredName = `snippet.${lang || "txt"}`;
-  const firstLine = code.split("\n")[0] || "";
-  
-  if (firstLine.includes("export default function") || firstLine.includes("export function")) {
-    const match = firstLine.match(/(?:function\s+)([A-Za-z0-9_]+)/);
-    if (match) inferredName = `${match[1]}.${lang === "typescript" ? "tsx" : lang === "javascript" ? "jsx" : "ts"}`;
-  } else if (firstLine.includes("const ") && firstLine.includes("=")) {
-    const match = firstLine.match(/const\s+([A-Za-z0-9_]+)/);
-    if (match) inferredName = `${match[1]}.${lang || "ts"}`;
-  } else if (code.includes("interface ") || code.includes("type ")) {
-    const match = code.match(/(?:interface|type)\s+([A-Za-z0-9_]+)/);
-    if (match) inferredName = `${match[1].toLowerCase()}.ts`;
+function getCleanExtension(lang: string, filename?: string): string {
+  if (filename) {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    if (ext) return ext;
   }
+  const map: Record<string, string> = {
+    typescript: "ts",
+    tsx: "tsx",
+    javascript: "js",
+    jsx: "jsx",
+    python: "py",
+    json: "json",
+    css: "css",
+    html: "html",
+    markdown: "md",
+  };
+  return map[lang.toLowerCase()] || lang.toLowerCase() || "txt";
+}
+
+// Claude-style Artifact Card using the exact path above it
+function CodeArtifactCard({ lang, code, detectedPath }: { lang: string; code: string; detectedPath?: string }) {
+  const ext = getCleanExtension(lang, detectedPath);
+  
+  // Use the exact filename from the path above (e.g. personas.ts from src/config/personas.ts)
+  const finalFilename = detectedPath ? detectedPath.split("/").pop() : `Code`;
 
   const handleInspect = () => {
-    window.dispatchEvent(new CustomEvent("hiraya-inspect-code", { detail: { code, lang, filename: inferredName } }));
+    window.dispatchEvent(
+      new CustomEvent("hiraya-inspect-code", {
+        detail: { code, lang, filename: finalFilename },
+      })
+    );
   };
 
   return (
@@ -36,8 +49,8 @@ function CodeArtifactCard({ lang, code }: { lang: string; code: string }) {
           <FileCode className="size-5" />
         </div>
         <div className="min-w-0">
-          <div className="truncate text-xs font-semibold text-fg font-mono">{inferredName}</div>
-          <div className="font-mono text-[10px] text-fg-subtle uppercase tracking-wider">{lang || "code snippet"}</div>
+          <div className="truncate text-xs font-semibold text-fg font-mono">{finalFilename}</div>
+          <div className="font-mono text-[10px] text-fg-subtle uppercase tracking-wider">.{ext}</div>
         </div>
       </div>
       <div className="ml-3 flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg">
@@ -56,13 +69,16 @@ const styled = (Tag: any, cls: string) =>
     return <Tag {...rest} className={`${cls} ${className ?? ""}`} />;
   };
 
+// Global tracker for the most recently seen file path string in the markdown stream
+let lastSeenFilepath: string | undefined = undefined;
+
 const components: Components = {
   h1: styled("h1", "mt-5 mb-2 text-lg font-semibold tracking-tight text-fg first:mt-0"),
   h2: styled("h2", "mt-5 mb-2 border-b border-line pb-1 text-[15px] font-semibold text-fg first:mt-0"),
   h3: styled("h3", "mt-4 mb-1.5 text-sm font-semibold text-fg first:mt-0"),
   h4: styled("h4", "mt-3 mb-1 text-sm font-medium text-fg-muted"),
   p: styled("p", "my-2 leading-relaxed first:mt-0 last:mb-0"),
-  ul: styled("ul", "my-2 list-disc space-y-1 pl-5 marker:text-fg-subtle [&:has(.task-list-item)]:list-none [&:has(.task-list-item)]:pl-0"),
+  ul: styled("ul", "my-2 list-disc space-y-1 pl-5 marker:text-fg-subtle"),
   ol: styled("ol", "my-2 list-decimal space-y-1 pl-5 marker:text-fg-subtle"),
   li: styled("li", "leading-relaxed"),
   strong: styled("strong", "font-semibold text-fg"),
@@ -83,24 +99,29 @@ const components: Components = {
   pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => {
     const text = String(children).replace(/\n$/, "");
-    const lang = /language-(\w+)/.exec(className ?? "")?.[1];
-    
+    const langMatch = /language-([a-zA-Z0-9_-]+)/.exec(className ?? "");
+    const lang = langMatch ? langMatch[1] : "";
+
+    // If this is an inline code snippet containing a file path (like src/config/personas.ts),
+    // save it so the very next code block can use it as its filename!
+    if (!lang && !text.includes("\n") && (text.includes("/") || text.includes(".")) && text.length < 60) {
+      lastSeenFilepath = text;
+      return <code className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-fg">{children}</code>;
+    }
+
     if (!lang && !text.includes("\n")) {
       return <code className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-fg">{children}</code>;
     }
 
-    return <CodeArtifactCard lang={lang ?? "text"} code={text} />;
+    // Capture and consume the tracked filepath
+    const currentPath = lastSeenFilepath;
+    lastSeenFilepath = undefined;
+
+    return <CodeArtifactCard lang={lang || "text"} code={text} detectedPath={currentPath} />;
   },
   input: ({ type, checked }) =>
     type === "checkbox" ? (
-      <span
-        aria-hidden
-        className={`mr-2 inline-flex size-4 translate-y-0.75 items-center justify-center rounded border ${
-          checked ? "border-(--persona) bg-(--persona)/20 text-(--persona)" : "border-line-strong"
-        }`}
-      >
-        {checked && <Check className="size-3" />}
-      </span>
+      <span aria-hidden className={`mr-2 inline-flex size-4 items-center justify-center rounded border ${checked ? "border-(--persona) bg-(--persona)/20 text-(--persona)" : "border-line-strong"}`}>{checked && <Check className="size-3" />}</span>
     ) : null,
 };
 

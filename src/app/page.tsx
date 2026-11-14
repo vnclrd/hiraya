@@ -342,6 +342,12 @@ export default function HirayaPage() {
                       if (part.type.startsWith("tool-")) {
                         const t = part as { toolName?: string; state?: string; input?: { fileName?: string; filePath?: string } };
                         const done = t.state === "output-available";
+                        
+                        // Hide generic read/list completion badges to keep chat clean like Claude
+                        if (done && (t.toolName === "readProjectFile" || t.toolName === "listProjectFiles")) {
+                          return null;
+                        }
+
                         let actionName = "Checking codebase";
                         if (t.toolName === "readProjectFile" && t.input?.filePath) actionName = `Reading ${t.input.filePath}`;
                         else if (t.toolName === "writeProjectFile" && t.input?.filePath) actionName = `Writing ${t.input.filePath}`;

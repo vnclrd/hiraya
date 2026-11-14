@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Copy, FileCode, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, FileCode, Loader2, X } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { Tooltip } from "./tooltip";
@@ -19,6 +19,10 @@ export function CodePreviewPanel({
 }) {
   const [copied, setCopied] = useState(false);
   const [selectedCode, setSelectedCode] = useState<{ code: string; lang: string; filename: string } | null>(null);
+  const [displayedCode, setDisplayedCode] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+
+  const animatedFilesRef = useRef<Set<string>>(new Set());
 
   let activeCode = selectedCode?.code;
   let activeLang = selectedCode?.lang;
@@ -49,6 +53,34 @@ export function CodePreviewPanel({
   activeFilename = activeFilename || "workspace-preview";
 
   useEffect(() => {
+    if (!activeCode) return;
+
+    if (animatedFilesRef.current.has(activeFilename)) {
+      setDisplayedCode(activeCode);
+      setIsTyping(false);
+      return;
+    }
+
+    setIsTyping(true);
+    setDisplayedCode("");
+    
+    let index = 0;
+    const timer = setInterval(() => {
+      if (index < activeCode!.length) {
+        index += 20;
+        setDisplayedCode(activeCode!.slice(0, index));
+      } else {
+        setDisplayedCode(activeCode!);
+        setIsTyping(false);
+        animatedFilesRef.current.add(activeFilename);
+        clearInterval(timer);
+      }
+    }, 15);
+
+    return () => clearInterval(timer);
+  }, [activeCode, activeFilename]);
+
+  useEffect(() => {
     const handleInspect = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail) {
@@ -77,13 +109,14 @@ export function CodePreviewPanel({
     <aside
       className={`fixed inset-y-0 right-0 z-40 flex flex-col border-l border-line bg-surface transition-all duration-300 ease-in-out xl:relative ${
         open
-          ? "w-[min(42rem,100vw)] xl:w-175 translate-x-0 opacity-100"
+          ? "w-[min(42rem,100vw)] xl:w-200 translate-x-0 opacity-100"
           : "w-0 xl:w-0 translate-x-full opacity-0 overflow-hidden border-l-0"
       }`}
     >
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4 bg-raised/50 whitespace-nowrap">
         <span className="flex items-center gap-2 text-xs font-semibold tracking-wider text-fg-muted uppercase font-mono truncate">
           <FileCode className="size-4 text-(--persona) shrink-0" /> Code Preview ({projectSlug})
+          {isTyping && <Loader2 className="size-3 animate-spin text-(--persona) ml-2" />}
         </span>
         <div className="flex items-center gap-1 shrink-0">
           <Tooltip label="Copy code" side="bottom">
@@ -115,12 +148,31 @@ export function CodePreviewPanel({
         <span className="uppercase">{activeLang}</span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-canvas p-4 min-w-175">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-canvas p-4 min-w-200">
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-md">
+          {/* Custom style block to add a clean subtle divider border next to the line numbers */}
+          <style jsx global>{`
+            .code-preview-highlighter pre {
+              background: transparent !important;
+            }
+            .code-preview-highlighter span.linenumber {
+              display: inline-block;
+              min-width: 2.2rem;
+              padding-right: 1rem;
+              margin-right: 1rem;
+              text-align: right;
+              color: var(--color-fg-subtle, #6b7280);
+              border-right: 1px solid var(--color-line, rgba(255, 255, 255, 0.08));
+              user-select: none;
+            }
+          `}</style>
           <SyntaxHighlighter
             style={vscDarkPlus}
             language={activeLang || "text"}
             PreTag="div"
+            showLineNumbers={true}
+            wrapLines={true}
+            className="code-preview-highlighter"
             customStyle={{
               margin: 0,
               padding: "1.2rem",
@@ -133,7 +185,7 @@ export function CodePreviewPanel({
             }}
             {...({} as any)}
           >
-            {activeCode}
+            {displayedCode}
           </SyntaxHighlighter>
         </div>
       </div>
