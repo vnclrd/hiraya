@@ -1,58 +1,53 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm"; // npm i remark-gfm  (tables + task lists)
-import { Check, Copy } from "lucide-react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import remarkGfm from "remark-gfm";
+import { Check, FileCode, ExternalLink } from "lucide-react";
 
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+// Claude-style Artifact Card with interactive selection
+function CodeArtifactCard({ lang, code }: { lang: string; code: string }) {
+  // Infer smart filename from code content or first line
+  let inferredName = `snippet.${lang || "txt"}`;
+  const firstLine = code.split("\n")[0] || "";
+  
+  if (firstLine.includes("export default function") || firstLine.includes("export function")) {
+    const match = firstLine.match(/(?:function\s+)([A-Za-z0-9_]+)/);
+    if (match) inferredName = `${match[1]}.${lang === "typescript" ? "tsx" : lang === "javascript" ? "jsx" : "ts"}`;
+  } else if (firstLine.includes("const ") && firstLine.includes("=")) {
+    const match = firstLine.match(/const\s+([A-Za-z0-9_]+)/);
+    if (match) inferredName = `${match[1]}.${lang || "ts"}`;
+  } else if (code.includes("interface ") || code.includes("type ")) {
+    const match = code.match(/(?:interface|type)\s+([A-Za-z0-9_]+)/);
+    if (match) inferredName = `${match[1].toLowerCase()}.ts`;
+  }
+
+  const handleInspect = () => {
+    window.dispatchEvent(new CustomEvent("hiraya-inspect-code", { detail: { code, lang, filename: inferredName } }));
   };
+
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-line bg-surface shadow-md">
-      <div className="flex items-center justify-between border-b border-line bg-raised px-3 py-2 text-[11px] text-fg-muted">
-        <span className="font-mono font-medium tracking-wide uppercase text-(--persona)">{lang || "text"}</span>
-        <button
-          type="button"
-          onClick={copy}
-          aria-label="Copy code"
-          className="flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 transition hover:bg-surface hover:text-fg"
-        >
-          {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
+    <div
+      onClick={handleInspect}
+      className="my-3 flex cursor-pointer items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 shadow-sm transition hover:border-(--persona)/50 hover:bg-raised"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-(--persona)/15 text-(--persona)">
+          <FileCode className="size-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-xs font-semibold text-fg font-mono">{inferredName}</div>
+          <div className="font-mono text-[10px] text-fg-subtle uppercase tracking-wider">{lang || "code snippet"}</div>
+        </div>
       </div>
-      <SyntaxHighlighter
-        style={vscDarkPlus}
-        language={lang || "text"}
-        PreTag="div"
-        customStyle={{
-          margin: 0,
-          padding: "1.1rem",
-          background: "transparent",
-          fontSize: "12.5px",
-          lineHeight: "1.6",
-        }}
-        codeTagProps={{
-          style: {
-            background: "transparent",
-          },
-        }}
-        {...({} as any)}
-      >
-        {code}
-      </SyntaxHighlighter>
+      <div className="ml-3 flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg">
+        <span>Preview</span>
+        <ExternalLink className="size-3" />
+      </div>
     </div>
   );
 }
 
-// Strips react-markdown's `node` prop and merges a base class onto a tag.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const styled = (Tag: any, cls: string) =>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,10 +84,12 @@ const components: Components = {
   code: ({ className, children }) => {
     const text = String(children).replace(/\n$/, "");
     const lang = /language-(\w+)/.exec(className ?? "")?.[1];
+    
     if (!lang && !text.includes("\n")) {
       return <code className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-fg">{children}</code>;
     }
-    return <CodeBlock lang={lang ?? ""} code={text} />;
+
+    return <CodeArtifactCard lang={lang ?? "text"} code={text} />;
   },
   input: ({ type, checked }) =>
     type === "checkbox" ? (

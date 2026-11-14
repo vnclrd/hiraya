@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { AlertTriangle, ArrowDown, ArrowUp, BookMarked, Check, FileText, FolderGit2, Loader2, Square } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BookMarked, Check, FileCode, FolderGit2, Loader2, Square } from "lucide-react";
 import { HIRAYA_PERSONAS, type PersonaConfig } from "@/config/personas";
 import { Markdown } from "./components/markdown";
-import { MemoryPanel, useProjectMemory } from "./components/memory-panel";
+import { CodePreviewPanel } from "./components/code-preview-panel";
+import { useProjectMemory } from "./components/memory-panel";
 import { Tooltip } from "./components/tooltip";
 
 const PERSONAS = Object.values(HIRAYA_PERSONAS);
@@ -253,14 +254,14 @@ export default function HirayaPage() {
                 {modelUsed}
               </span>
             )}
-            <Tooltip label="Project memory" hint="⌘/" side="bottom">
+            <Tooltip label="Toggle Code Preview" side="bottom">
               <button
                 type="button"
-                onClick={() => setPanelOpen(true)}
-                aria-label="Open project memory"
-                className="cursor-pointer rounded-md border border-line p-1.5 text-fg-muted transition hover:bg-raised hover:text-fg xl:hidden"
+                onClick={() => setPanelOpen((o) => !o)}
+                aria-label="Toggle Code Preview"
+                className="cursor-pointer rounded-md border border-line p-1.5 text-fg-muted transition hover:bg-raised hover:text-fg"
               >
-                <FileText className="size-4" />
+                <FileCode className="size-4" />
               </button>
             </Tooltip>
             <Tooltip label="Summarize this chat into PROGRESS.md and start fresh" hint="/wrap" side="bottom">
@@ -438,7 +439,7 @@ export default function HirayaPage() {
         </form>
       </main>
 
-      <MemoryPanel mem={mem} open={panelOpen} onClose={() => setPanelOpen(false)} />
+      <CodePreviewPanel messages={messages} open={panelOpen} onClose={() => setPanelOpen(false)} projectSlug={slug} />
     </div>
   );
 }
