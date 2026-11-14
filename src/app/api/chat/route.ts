@@ -32,9 +32,10 @@ ${trimmedContext}
 --- PROGRESS.md (Summary) ---
 ${trimmedProgress}
 
-INSTRUCTION: You have access to tools to read files and list directories inside the active codebase. 
-- If the user asks for a file and you are unsure of its exact path, ALWAYS call 'listProjectFiles' first (e.g., check '' or 'src') to locate it.
-- Once you have the correct relative path, call 'readProjectFile' to get the code and present it to the user.`;
+INSTRUCTION: You have access to tools to read, list, and write files inside the active codebase. 
+- If the user asks for a file and you are unsure of its exact path, ALWAYS call 'listProjectFiles' first.
+- Use 'readProjectFile' to inspect existing code before making modifications.
+- When asked to build features, fix bugs, or write code, you can use 'writeProjectFile' to modify the codebase directly on disk.`;
 
   const candidates = getFallbackChain(persona.preferredModel);
 
@@ -98,6 +99,31 @@ INSTRUCTION: You have access to tools to read files and list directories inside 
                 return content;
               } catch (err: any) {
                 return `Error reading file at '${filePath}': ${err.message}. Try listing the directory first to find the correct path.`;
+              }
+            },
+          }),
+
+          // NEW: Dynamic tool to create or overwrite code files in the active repository
+          writeProjectFile: tool({
+            description: `Write or update code files in the ${projectSlug} repository. Use this to implement features, fix bugs, or create components directly.`,
+            inputSchema: z.object({
+              filePath: z.string().describe("Relative path from project root, e.g. 'src/components/AppHeader.tsx'"),
+              content: z.string().describe("The complete file content to write"),
+            }),
+            execute: async ({ filePath, content }) => {
+              try {
+                const projectRoot = path.resolve(process.cwd(), "..", projectSlug);
+                const safePath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+                const fullPath = path.join(projectRoot, safePath);
+                
+                // Ensure parent directories exist (e.g., if writing a file in a new folder)
+                await fs.mkdir(path.dirname(fullPath), { recursive: true });
+                
+                // Write the file to disk
+                await fs.writeFile(fullPath, content, "utf-8");
+                return `Successfully wrote and updated file: ${filePath}`;
+              } catch (err: any) {
+                return `Error writing file at '${filePath}': ${err.message}`;
               }
             },
           }),

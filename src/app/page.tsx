@@ -36,6 +36,7 @@ export default function HirayaPage() {
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
+  const hasRefreshedRef = useRef(false);
 
   const bot = HIRAYA_PERSONAS[personaId] ?? HIRAYA_PERSONAS.violet;
   const mem = useProjectMemory(slug);
@@ -125,6 +126,30 @@ export default function HirayaPage() {
       activityEvents.forEach((event) => window.removeEventListener(event, resetIdleTimer));
     };
   }, [messages, wrapping]);
+
+  // ── AUTO-REFRESH ON FILE WRITE ──
+  useEffect(() => {
+    if (hasRefreshedRef.current) return;
+
+    for (const m of messages) {
+      if (m.role === "assistant") {
+        const hasFinishedWrite = m.parts?.some(
+          (p: any) =>
+            (p.type?.startsWith("tool-") || p.type === "tool-invocation") &&
+            (p.toolName === "writeProjectFile" || p.toolInvocation?.toolName === "writeProjectFile") &&
+            (p.state === "output-available" || p.toolInvocation?.state === "result")
+        );
+
+        if (hasFinishedWrite) {
+          hasRefreshedRef.current = true;
+          const timer = setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+          return () => clearTimeout(timer);
+        }
+      }
+    }
+  }, [messages]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -314,9 +339,14 @@ export default function HirayaPage() {
                     {m.parts.map((part, i) => {
                       if (part.type === "text") return <Markdown key={i}>{part.text}</Markdown>;
                       if (part.type.startsWith("tool-")) {
-                        const t = part as { state?: string; input?: { fileName?: string; filePath?: string } };
+                        const t = part as { toolName?: string; state?: string; input?: { fileName?: string; filePath?: string } };
                         const done = t.state === "output-available";
-                        const actionName = t.input?.filePath ? `Reading ${t.input.filePath}` : t.input?.fileName ? `Updating ${t.input?.fileName}` : "Checking codebase";
+                        let actionName = "Checking codebase";
+                        if (t.toolName === "readProjectFile" && t.input?.filePath) actionName = `Reading ${t.input.filePath}`;
+                        else if (t.toolName === "writeProjectFile" && t.input?.filePath) actionName = `Writing ${t.input.filePath}`;
+                        else if (t.toolName === "listProjectFiles") actionName = "Listing directory";
+                        else if (t.input?.fileName) actionName = `Updating ${t.input.fileName}`;
+
                         return (
                           <div key={i} className="my-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 font-mono text-[11px] text-fg-muted">
                             {done ? <Check className="size-3 text-emerald-400" /> : <Loader2 className="size-3 animate-spin" />}
