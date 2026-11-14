@@ -4,6 +4,8 @@ import { memo, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm"; // npm i remark-gfm  (tables + task lists)
 import { Check, Copy } from "lucide-react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false);
@@ -13,22 +15,39 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="my-3 overflow-hidden rounded-lg border border-line bg-canvas">
-      <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-[11px] text-fg-subtle">
-        <span className="font-mono">{lang || "text"}</span>
+    <div className="my-3 overflow-hidden rounded-xl border border-line bg-surface shadow-md">
+      <div className="flex items-center justify-between border-b border-line bg-raised px-3 py-2 text-[11px] text-fg-muted">
+        <span className="font-mono font-medium tracking-wide uppercase text-(--persona)">{lang || "text"}</span>
         <button
           type="button"
           onClick={copy}
           aria-label="Copy code"
-          className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 transition hover:bg-raised hover:text-fg"
+          className="flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 transition hover:bg-surface hover:text-fg"
         >
           {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-[12.5px] leading-relaxed">
-        <code className="font-mono text-fg">{code}</code>
-      </pre>
+      <SyntaxHighlighter
+        style={vscDarkPlus}
+        language={lang || "text"}
+        PreTag="div"
+        customStyle={{
+          margin: 0,
+          padding: "1.1rem",
+          background: "transparent",
+          fontSize: "12.5px",
+          lineHeight: "1.6",
+        }}
+        codeTagProps={{
+          style: {
+            background: "transparent",
+          },
+        }}
+        {...({} as any)}
+      >
+        {code}
+      </SyntaxHighlighter>
     </div>
   );
 }
