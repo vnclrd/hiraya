@@ -1,16 +1,34 @@
 import { NextResponse } from "next/server";
 import { generateText, convertToModelMessages } from "ai";
 import { getFallbackChain, isRateLimitError } from "@/lib/llm-router";
-import { appendProjectMarkdown } from "@/lib/markdown-fs";
+import { appendProjectMarkdown, saveChatTranscript } from "@/lib/markdown-fs";
 
 export async function POST(req: Request) {
-  const { messages, projectSlug = "sample-project", personaName = "J.A.R.V.I.S." } = await req.json();
+  const { messages, projectSlug = "sample-project", personaName = "Violet" } = await req.json();
 
   if (!messages || messages.length === 0) {
     return NextResponse.json({ error: "No messages to summarize." }, { status: 400 });
   }
 
-  const modelMessages = await convertToModelMessages(messages);
+  // 1. Save the full chat transcript to a markdown file in the chats/ directory for multi-device sync
+  try {
+    await saveChatTranscript(projectSlug, personaName, messages);
+  } catch (err) {
+    console.error("[Hiraya Closeout] Failed to save chat transcript file:", err);
+  }
+
+  // 2. Ensure the messages array ends with a user turn (Gemini API requirement)
+  let sanitizedMessages = [...messages];
+  while (sanitizedMessages.length > 0 && sanitizedMessages[sanitizedMessages.length - 1].role === 'assistant') {
+    sanitizedMessages.pop();
+  }
+
+  if (sanitizedMessages.length === 0) {
+    // Fallback if the chat only had assistant messages
+    sanitizedMessages = [{ id: 'fallback', role: 'user', parts: [{ type: 'text', text: 'Please summarize our previous work session.' }] }];
+  }
+
+  const modelMessages = await convertToModelMessages(sanitizedMessages);
 
   const closeoutPrompt = `You are generating a concise engineering handoff log for a developer's PROGRESS.md file based on the conversation above (assisted by ${personaName}).
 

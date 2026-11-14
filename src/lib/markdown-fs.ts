@@ -41,3 +41,39 @@ export async function appendProjectMarkdown(
   await fs.appendFile(targetPath, formattedBlock, "utf-8");
   return { success: true, fileName, appended: formattedBlock };
 }
+
+/**
+ * Saves a completed chat session transcript into a markdown file under workspace-projects/[slug]/chats/
+ */
+export async function saveChatTranscript(
+  projectSlug: string,
+  personaName: string,
+  messages: Array<{ role: string; parts: Array<{ type: string; text?: string }> }>
+) {
+  const projectDir = path.join(process.cwd(), 'workspace-projects', projectSlug, 'chats');
+  await fs.mkdir(projectDir, { recursive: true });
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `${timestamp}_${personaName.toLowerCase().replace(/\s+/g, '-')}.md`;
+  const filePath = path.join(projectDir, filename);
+
+  // Format the messages array into readable Markdown
+  let markdownContent = `# Chat Session: ${personaName}\n`;
+  markdownContent += `**Date:** ${new Date().toLocaleString()}\n`;
+  markdownContent += `**Project:** ${projectSlug}\n\n---\n\n`;
+
+  for (const msg of messages) {
+    const roleLabel = msg.role === 'user' ? '### You' : `### ${personaName}`;
+    markdownContent += `${roleLabel}\n`;
+    
+    for (const part of msg.parts) {
+      if (part.type === 'text' && part.text) {
+        markdownContent += `${part.text}\n\n`;
+      }
+    }
+    markdownContent += '\n';
+  }
+
+  await fs.writeFile(filePath, markdownContent, 'utf-8');
+  return filename;
+}

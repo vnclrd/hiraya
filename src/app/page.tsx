@@ -76,7 +76,7 @@ export default function HirayaPage() {
     sendMessage({ text }, { body: { personaId, projectSlug: slug } });
   };
 
-  const wrap = async (clear: boolean) => {
+  const wrap = async (clear = false) => {
     if (messages.length === 0 || wrapping) return;
     setWrapping(true);
     try {
@@ -88,13 +88,43 @@ export default function HirayaPage() {
       if (!res.ok) throw new Error();
       await mem.refresh();
       if (clear) setMessages([]);
-      flash("Session wrapped into PROGRESS.md");
+      flash("Session wrapped into PROGRESS.md & chat transcript saved");
     } catch {
       flash("Couldn't wrap session — try again", false);
     } finally {
       setWrapping(false);
     }
   };
+
+  // ── IDLE AUTO-WRAP (30 Minutes) ──
+  useEffect(() => {
+    // 30 minutes in milliseconds = 30 * 60 * 1000 = 1800000
+    const IDLE_TIMEOUT = 30 * 60 * 1000; 
+    let timer: NodeJS.Timeout;
+
+    const resetIdleTimer = () => {
+      clearTimeout(timer);
+      // Only set timer if there are actually messages to wrap
+      if (messages.length > 0 && !wrapping) {
+        timer = setTimeout(() => {
+          console.log("[Hiraya] 30 minutes of inactivity detected. Auto-wrapping session...");
+          wrap(false); // Wraps session to PROGRESS.md and saves transcript, keeping UI intact
+        }, IDLE_TIMEOUT);
+      }
+    };
+
+    // Events that count as user activity
+    const activityEvents = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    
+    // Reset timer on user activity or when messages change
+    activityEvents.forEach((event) => window.addEventListener(event, resetIdleTimer));
+    resetIdleTimer();
+
+    return () => {
+      clearTimeout(timer);
+      activityEvents.forEach((event) => window.removeEventListener(event, resetIdleTimer));
+    };
+  }, [messages, wrapping]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
