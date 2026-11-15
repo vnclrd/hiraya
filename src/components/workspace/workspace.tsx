@@ -38,7 +38,7 @@ import { CodePreviewPanel } from '@/components/panels/code-preview-panel';
 export function Workspace() {
   const [view, setView] = useState<string>('general');
   const [slug, setSlug] = useState('');
-  const [greeting, setGreeting] = useState('Welcome back');
+  const [greeting, setGreeting] = useState("Let's get started.");
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [memOpen, setMemOpen] = useState(false); // memory slide-over (below xl; docked at xl+)
@@ -70,7 +70,7 @@ export function Workspace() {
 
   const isGeneral = view === 'general';
   const bot = isGeneral ? GENERAL : (HIRAYA_PERSONAS[view] ?? GENERAL);
-  const effSlug = slug || 'general'; // "general" is the scratch folder on disk
+  const effSlug = slug || 'general';
   const mem = useProjectMemory(effSlug);
   const {
     projects,
@@ -92,16 +92,37 @@ export function Workspace() {
         JSON.parse(sessionStorage.getItem('hiraya:writes') ?? '[]'),
       );
     } catch {}
+
     const h = new Date().getHours();
-    setGreeting(
+    const name = 'Miguel';
+
+    // Claude-style randomized or time-tailored variations
+    const options =
       h < 5
-        ? 'Working late'
+        ? [
+            `Burning the midnight oil, ${name}`,
+            `Working late, ${name}`,
+            `Quiet hours, ${name}`,
+          ]
         : h < 12
-          ? 'Good morning'
+          ? [
+              `Good morning, ${name}`,
+              `Ready for the day, ${name}`,
+              `Morning, ${name}`,
+            ]
           : h < 18
-            ? 'Good afternoon'
-            : 'Good evening',
-    );
+            ? [
+                `Good afternoon, ${name}`,
+                `Productive afternoon, ${name}`,
+                `Keeping the momentum going, ${name}`,
+              ]
+            : [
+                `Good evening, ${name}`,
+                `Winding down or building, ${name}`,
+                `Evening session, ${name}`,
+              ];
+    const selected = options[Math.floor(Math.random() * options.length)];
+    setGreeting(selected);
   }, []);
   useEffect(() => {
     try {
@@ -421,10 +442,15 @@ export function Workspace() {
   );
 
   return (
-    <div style={accent(bot.accent)} className='flex h-dvh overflow-hidden bg-canvas text-fg'>
+    <div
+      style={accent(bot.accent)}
+      className='flex h-dvh overflow-hidden bg-canvas text-fg'
+    >
       <div
         className={`flex shrink-0 transition-all duration-300 ease-in-out ${
-          sidebarOpen ? 'w-64 translate-x-0 opacity-100' : 'w-0 -translate-x-full opacity-0 overflow-hidden'
+          sidebarOpen
+            ? 'w-64 translate-x-0 opacity-100'
+            : 'w-0 -translate-x-full opacity-0 overflow-hidden'
         }`}
       >
         <Sidebar view={view} onSelect={setView} />
@@ -436,7 +462,9 @@ export function Workspace() {
         <header className='grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line bg-canvas/80 px-4 backdrop-blur'>
           <div className='flex min-w-0 items-center gap-3'>
             <Tooltip
-              label={sidebarOpen ? 'Hide personas sidebar' : 'Show personas sidebar'}
+              label={
+                sidebarOpen ? 'Hide personas sidebar' : 'Show personas sidebar'
+              }
               side='bottom'
             >
               <button
