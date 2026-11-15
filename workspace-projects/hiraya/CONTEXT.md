@@ -153,3 +153,7 @@ Saves the transcript, summarizes via `generateText` (Completed / Decisions & Con
 - API errors: JSON `{error}` for closeout; plain text 429 for chat when all providers are exhausted.
 - Path safety for memory files goes through `resolveSafeProjectPath` (slug sanitization) — **the code-reading tools do not use it** (see `PROGRESS.md`).
 - **[2026-11-15]** - Developer/User name: Miguel (addressed as Sir)
+
+- **[2026-11-15]** - Delegated chat stream file uploads (.zip, .pdf, .jpg, .png) task to Violet.
+
+- **[2026-11-15]** - **File Uploads**: Specification for attaching files or images via `src/components/chat/composer.tsx` and handling multipart/base64 uploads in `src/app/api/chat/route.ts`.

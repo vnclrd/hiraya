@@ -132,11 +132,6 @@ export function Sidebar({
           })}
         </div>
       </nav>
-
-      <div className="shrink-0 border-t border-line px-4 py-3 text-[11px] text-fg-subtle">
-        <span className="font-mono">⌘/</span> memory <span className="mx-1.5">·</span>
-        <span className="font-mono">⌘.</span> code
-      </div>
     </aside>
   );
 }

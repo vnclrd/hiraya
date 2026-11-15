@@ -110,3 +110,23 @@ A single-page, local-first workspace. You pick a persona and a project folder na
 - **[2026-11-15]** Reviewed src/hooks/use-office.ts changes
 
 - **[2026-11-15]** Confirmed removal of test comments from src/hooks/use-office.ts
+
+- **[2026-11-15]** - Handed off file upload implementation task to Violet.
+
+- **[2026-11-15]** - Handed off file upload implementation task to Violet.
+
+- **[2026-11-15]** - File upload support specification added for `src/components/chat/composer.tsx` and `src/app/api/chat/route.ts`
+
+- **[2026-11-15]** Reviewed file upload implementation in src/components/chat/composer.tsx
+
+- **[2026-11-15]** Refactored file upload logic in src/components/chat/composer.tsx to use Promise.all concurrency, fixed input change handler naming, and optimized attachment state handling.
+
+- **[2026-11-15]** Investigated and noted attachment payload requirements for chat messages in composer and API route.
+
+- **[2026-11-15]** Fixed file attachment submission in composer by ensuring empty text with attachments enables send and formatting file payloads.
+
+- **[2026-11-15]** Inspected LLM router rate limit pacing and fallback chain configuration.
+
+- **[2026-11-15]** Integrated paceRequest into POST handler in src/app/api/chat/route.ts.
+
+- **[2026-11-15]** Successfully added await paceRequest() at the start of the POST handler in src/app/api/chat/route.ts.

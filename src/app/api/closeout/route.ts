@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateText, convertToModelMessages } from "ai";
-import { getFallbackChain, isRateLimitError } from "@/lib/server/llm-router";
+import { getFallbackChain, createRoutedModel, isRateLimitError, describeError } from "@/lib/server/llm-router";
 import { appendProjectMarkdown, saveChatTranscript } from "@/lib/server/markdown-fs";
 
 export async function POST(req: Request) {
@@ -39,37 +39,34 @@ Summarize the session into clean Markdown bullet points using ONLY these section
 
 Keep it crisp, technical, and under 120 words. Do not include conversational filler or wrap the output in a markdown code block.`;
 
-  // Default to Flash-Lite first to save your primary Flash quota for active coding
-  const candidates = getFallbackChain("gemini-3.5-flash-lite");
+  // Default to Flash-Lite first to save your primary Flash quota for active coding.
+  // The routed model shares the same quota tracking as /api/chat and fails over per request.
+  const model = createRoutedModel(getFallbackChain("gemini-3.5-flash-lite"));
 
-  for (const candidate of candidates) {
-    try {
-      const { text } = await generateText({
-        model: candidate.model,
-        system: closeoutPrompt,
-        messages: modelMessages,
-      });
+  try {
+    const { text, response } = await generateText({
+      model,
+      maxRetries: 0, // failover is handled by the routed model
+      system: closeoutPrompt,
+      messages: modelMessages,
+    });
 
-      const result = await appendProjectMarkdown(
-        projectSlug,
-        "PROGRESS.md",
-        `Session Handoff (${personaName}):\n${text}`
-      );
+    const result = await appendProjectMarkdown(
+      projectSlug,
+      "PROGRESS.md",
+      `Session Handoff (${personaName}):\n${text}`
+    );
 
-      return NextResponse.json({
-        success: true,
-        summary: text,
-        modelUsed: candidate.id,
-        result,
-      });
-    } catch (error) {
-      if (isRateLimitError(error)) {
-        console.warn(`[Hiraya Closeout] 429 on ${candidate.id}, failing over...`);
-        continue;
-      }
-      throw error;
+    return NextResponse.json({
+      success: true,
+      summary: text,
+      modelUsed: response?.modelId,
+      result,
+    });
+  } catch (error) {
+    if (isRateLimitError(error) || (error as { status?: number })?.status === 429) {
+      return NextResponse.json({ error: describeError(error) }, { status: 429 });
     }
+    throw error;
   }
-
-  return NextResponse.json({ error: "All LLM providers rate-limited." }, { status: 429 });
 }

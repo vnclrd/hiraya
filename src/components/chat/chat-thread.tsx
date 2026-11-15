@@ -121,7 +121,9 @@ export function ChatThread({ messages, status, error, bot, onSend, onRetry }: Pr
           {error && (
             <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
               <AlertTriangle className="size-4 shrink-0" />
-              Something went wrong (providers may be rate-limited).
+              {error.message?.includes("rate-limited")
+                ? error.message
+                : "Something went wrong (providers may be rate-limited)."}
               <button type="button" onClick={onRetry} className="ml-auto cursor-pointer underline">
                 Retry
               </button>
