@@ -1,8 +1,8 @@
 import { streamText, tool, convertToModelMessages, stepCountIs } from "ai";
 import { z } from "zod";
 import { HIRAYA_PERSONAS } from "@/config/personas";
-import { readProjectMarkdown, appendProjectMarkdown } from "@/lib/markdown-fs";
-import { getFallbackChain, isRateLimitError } from "@/lib/llm-router";
+import { readProjectMarkdown, appendProjectMarkdown } from "@/lib/server/markdown-fs";
+import { getFallbackChain, isRateLimitError } from "@/lib/server/llm-router";
 import fs from 'fs/promises';
 import path from 'path';
 

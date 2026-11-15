@@ -81,3 +81,16 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Code preview: transparent Prism background + gutter divider (replaces <style jsx global>) */
+.code-preview-highlighter pre { background: transparent !important; }
+.code-preview-highlighter span.linenumber {
+  display: inline-block;
+  min-width: 2.2rem;
+  padding-right: 1rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: var(--color-fg-subtle);
+  border-right: 1px solid var(--color-line);
+  user-select: none;
+}

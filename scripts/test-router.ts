@@ -3,7 +3,7 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" }); // <--- Add this at the top
 
-import { getFallbackChain, isRateLimitError } from "../src/lib/llm-router";
+import { getFallbackChain, isRateLimitError } from "../src/lib/server/llm-router";
 import { generateText } from "ai";
 
 async function testRouter() {

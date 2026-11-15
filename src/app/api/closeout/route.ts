@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateText, convertToModelMessages } from "ai";
-import { getFallbackChain, isRateLimitError } from "@/lib/llm-router";
-import { appendProjectMarkdown, saveChatTranscript } from "@/lib/markdown-fs";
+import { getFallbackChain, isRateLimitError } from "@/lib/server/llm-router";
+import { appendProjectMarkdown, saveChatTranscript } from "@/lib/server/markdown-fs";
 
 export async function POST(req: Request) {
   const { messages, projectSlug = "sample-project", personaName = "Violet" } = await req.json();

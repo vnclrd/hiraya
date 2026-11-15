@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, FolderGit2, Plus, Search } from "lucide-react";
+import { sanitize } from "@/lib/slug";
 
-export const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9-_]/g, ""); // mirrors server-side slug cleaning
 
 type Item = { kind: "none" } | { kind: "project"; slug: string } | { kind: "create"; slug: string };
 

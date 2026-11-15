@@ -42,6 +42,7 @@ function CodeArtifactCard({ lang, code, detectedPath }: { lang: string; code: st
   return (
     <div
       onClick={handleInspect}
+      data-keep-code-open
       className="my-3 flex cursor-pointer items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 shadow-sm transition hover:border-(--persona)/50 hover:bg-raised"
     >
       <div className="flex items-center gap-3 min-w-0">
