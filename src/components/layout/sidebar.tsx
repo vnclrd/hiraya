@@ -1,69 +1,109 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { MessageSquare } from "lucide-react";
 import { GENERAL, PERSONAS } from "@/config/modes";
 import { Avatar } from "@/components/ui/avatar";
+import { accent } from "@/lib/accent";
+
+type ItemProps = {
+  accentColor: string;
+  active: boolean;
+  hotkey: string;
+  leading: ReactNode;
+  title: string;
+  subtitle: string;
+  tooltip?: string;
+  onClick: () => void;
+};
+
+/** One row of the sidebar: same layout for General chat and every persona. */
+function NavItem({ accentColor, active, hotkey, leading, title, subtitle, tooltip, onClick }: ItemProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={tooltip}
+      aria-current={active ? "page" : undefined}
+      style={accent(accentColor)}
+      className={`relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-(--persona)/60 ${
+        active ? "bg-raised" : "hover:bg-raised/60"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`absolute inset-y-2 left-0 w-0.5 rounded-full bg-(--persona) transition-opacity duration-150 ${
+          active ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      {leading}
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className={`block truncate text-sm ${active ? "font-semibold text-fg" : "font-medium text-fg/90"}`}>
+          {title}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-fg-muted">{subtitle}</span>
+      </span>
+      <kbd className="shrink-0 font-mono text-[10px] text-fg-subtle tabular-nums">{hotkey}</kbd>
+    </button>
+  );
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="px-3 pt-4 pb-1.5 text-[10px] font-semibold tracking-wider text-fg-subtle uppercase">{children}</p>
+  );
+}
 
 export function Sidebar({ view, onSelect }: { view: string; onSelect: (id: string) => void }) {
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface md:flex">
-      <div className="flex h-14 items-center gap-2 border-b border-line px-4">
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-surface">
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
         <span className="size-2.5 rounded-full bg-(--persona) shadow-[0_0_12px_var(--persona)]" />
         <h1 className="text-sm font-semibold tracking-tight">Hiraya</h1>
         <span className="text-xs text-fg-subtle">workspace</span>
       </div>
 
-      <div className="p-2">
-        <button
-          type="button"
+      <nav aria-label="Conversations" className="flex-1 overflow-y-auto px-2 pb-2">
+        <SectionLabel>Chat</SectionLabel>
+        <NavItem
+          accentColor={GENERAL.accent}
+          active={view === "general"}
+          hotkey="⌥0"
+          title="General chat"
+          subtitle="Ask anything"
           onClick={() => onSelect("general")}
-          aria-current={view === "general"}
-          style={{ "--p": GENERAL.accent } as React.CSSProperties}
-          className={`group flex w-full cursor-pointer items-center gap-3 rounded-lg border p-2.5 text-left transition duration-200 ${
-            view === "general" ? "border-(--p)/40 bg-(--p)/8 shadow-[0_0_28px_-12px_var(--p)]" : "border-transparent hover:border-line hover:bg-raised"
-          }`}
-        >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-(--p)/15 text-(--p) ring-1 ring-(--p)/30">
-            <MessageSquare className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center justify-between">
-              <span className="text-sm font-medium">General chat</span>
-              <kbd className="font-mono text-[10px] text-fg-subtle opacity-0 transition group-hover:opacity-100">⌥0</kbd>
-            </span>
-            <span className="block truncate text-[11px] text-fg-muted">Ask anything</span>
-          </span>
-        </button>
-      </div>
-
-      <p className="px-4 pt-1 pb-1 text-[10px] font-semibold tracking-wider text-fg-subtle uppercase">AI personas</p>
-      <nav aria-label="Personas" className="flex-1 space-y-1 overflow-y-auto p-2 pt-0">
-        {PERSONAS.map((p, i) => {
-          const active = p.id === view;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              style={{ "--p": p.accent } as React.CSSProperties}
-              onClick={() => onSelect(p.id)}
-              aria-current={active}
-              className={`group flex w-full cursor-pointer items-start gap-3 rounded-lg border p-2.5 text-left transition duration-200 ${
-                active ? "border-(--p)/40 bg-(--p)/8 shadow-[0_0_28px_-12px_var(--p)]" : "border-transparent hover:border-line hover:bg-raised"
-              }`}
+          leading={
+            <span
+              style={accent(GENERAL.accent)}
+              className="grid size-8 shrink-0 place-items-center rounded-lg bg-(--persona)/15 text-(--persona) ring-1 ring-(--persona)/30"
             >
-              <Avatar bot={p} />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{p.name}</span>
-                  <kbd className="font-mono text-[10px] text-fg-subtle opacity-0 transition group-hover:opacity-100">⌥{i + 1}</kbd>
-                </span>
-                <span className="block truncate text-[11px] text-fg-muted">{p.title}</span>
-                <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-fg-subtle">{p.description}</span>
-              </span>
-            </button>
-          );
-        })}
+              <MessageSquare className="size-4" />
+            </span>
+          }
+        />
+
+        <SectionLabel>Personas</SectionLabel>
+        <div className="space-y-0.5">
+          {PERSONAS.map((p, i) => (
+            <NavItem
+              key={p.id}
+              accentColor={p.accent}
+              active={p.id === view}
+              hotkey={`⌥${i + 1}`}
+              title={p.name}
+              subtitle={p.title}
+              tooltip={p.description}
+              onClick={() => onSelect(p.id)}
+              leading={<Avatar bot={p} />}
+            />
+          ))}
+        </div>
       </nav>
+
+      <div className="shrink-0 border-t border-line px-4 py-3 text-[11px] text-fg-subtle">
+        <span className="font-mono">⌘/</span> memory <span className="mx-1.5">·</span>
+        <span className="font-mono">⌘.</span> code
+      </div>
     </aside>
   );
 }

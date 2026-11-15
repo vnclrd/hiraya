@@ -1,7 +1,6 @@
 import { HIRAYA_PERSONAS, type PersonaConfig } from "@/config/personas";
 
-// General chat. Add a `general` entry to personas.ts (see reply) so the API uses its system prompt;
-// this fallback only keeps the UI from crashing until you do.
+// General chat uses the `general` entry in personas.ts; the fallback only keeps the UI from crashing if it is removed.
 export const GENERAL: PersonaConfig = HIRAYA_PERSONAS.general ?? {
   ...HIRAYA_PERSONAS.violet,
   id: "general",

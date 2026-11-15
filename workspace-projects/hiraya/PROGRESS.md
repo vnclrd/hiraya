@@ -99,3 +99,8 @@ A single-page, local-first workspace. You pick a persona and a project folder na
 - **[2026-11-14]** Updated persona titles in `src/config/personas.ts`: Toronto -> Systems Architect, Violet -> Lead Full-Stack Developer, Vince -> Full-Stack Developer, Blue -> QA Tester, Entropy -> Developer Experience Engineer, Emily -> Technical Writer.
 
 - **[2026-11-14]** - Updated persona descriptions in `src/config/personas.ts` to be short, simple, and role-focused relative to their team titles.
+
+- **[2026-11-15]** Session Handoff (Toronto):
+  - **Completed:** Retrieved and outputted the contents of `src/config/personas.ts`, displaying the full configuration for all assistant personas (Hiraya, Toronto, Violet, Vince, Blue, Entropy, Emily).
+  - **Decisions & Context:** Confirmed the structure of `PersonaConfig` and the definitions within `HIRAYA_PERSONAS`.
+  - **Next Steps:** Await further instructions regarding persona updates or feature implementations.
