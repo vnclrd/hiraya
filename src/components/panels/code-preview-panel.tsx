@@ -24,12 +24,34 @@ export function CodePreviewPanel({
   onRequestOpen: () => void;
   projectSlug: string;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null); // null = newest
   const [pinned, setPinned] = useState<Artifact | null>(null); // opened from a chat card that isn't in `artifacts`
   const [copied, setCopied] = useState(false);
   const [displayed, setDisplayed] = useState('');
   const [typing, setTyping] = useState(false);
   const animated = useRef<Set<string>>(new Set());
+
+  // Close panel whenever user clicks outside of it
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    // Tiny timeout buffer so the toggle button click doesn't instantly trigger close
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open, onClose]);
 
   // New code arrives → follow the newest artifact
   useEffect(() => {
@@ -104,6 +126,7 @@ export function CodePreviewPanel({
   let snippetN = 0;
   return (
     <aside
+      ref={panelRef}
       aria-hidden={!open}
       inert={!open}
       className={`fixed inset-y-0 right-0 z-40 flex w-[min(46rem,100vw)] flex-col border-l border-line-strong bg-surface shadow-[-24px_0_48px_-24px_rgba(0,0,0,0.7)] transition-transform duration-300 ease-out ${
@@ -194,6 +217,21 @@ export function CodePreviewPanel({
 
       <div className='min-h-0 flex-1 overflow-auto bg-canvas p-4'>
         <div className='overflow-hidden rounded-xl border border-line bg-surface shadow-md'>
+          <style jsx global>{`
+            .code-preview-highlighter pre {
+              background: transparent !important;
+            }
+            .code-preview-highlighter span.linenumber {
+              display: inline-block;
+              min-width: 2.2rem;
+              padding-right: 1rem;
+              margin-right: 1rem;
+              text-align: right;
+              color: var(--color-fg-subtle, #6b7280);
+              border-right: 1px solid var(--color-line, rgba(255, 255, 255, 0.08));
+              user-select: none;
+            }
+          `}</style>
           <SyntaxHighlighter
             style={vscDarkPlus}
             language={active?.lang || 'text'}

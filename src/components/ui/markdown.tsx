@@ -54,10 +54,6 @@ function CodeArtifactCard({ lang, code, detectedPath }: { lang: string; code: st
           <div className="font-mono text-[10px] text-fg-subtle uppercase tracking-wider">.{ext}</div>
         </div>
       </div>
-      <div className="ml-3 flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg">
-        <span>Preview</span>
-        <ExternalLink className="size-3" />
-      </div>
     </div>
   );
 }
