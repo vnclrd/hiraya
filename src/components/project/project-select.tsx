@@ -122,7 +122,7 @@ export function ProjectSelect({
         <div
           ref={menu}
           style={{ top: pos.top, left: pos.left }}
-          className="animate-rise fixed z-[60] w-72 overflow-hidden rounded-xl border border-line-strong bg-raised shadow-2xl"
+          className="animate-rise fixed z-60 w-72 overflow-hidden rounded-xl border border-line-strong bg-raised shadow-2xl"
         >
           <label className='flex items-center gap-2 border-b border-line px-3 py-2.5'>
             <Search className='size-3.5 text-fg-subtle' />

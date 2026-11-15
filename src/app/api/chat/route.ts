@@ -6,6 +6,9 @@ import { getFallbackChain, isRateLimitError } from "@/lib/server/llm-router";
 import fs from 'fs/promises';
 import path from 'path';
 
+// Hidden from directory listings (noise), but dotfiles like .env / .gitignore stay visible
+const HIDDEN = new Set([".git", ".next", "node_modules", ".DS_Store", ".idea", ".vscode"]);
+
 export async function POST(req: Request) {
   const { messages, personaId = "violet", projectSlug = "sample-project" } = await req.json();
 
@@ -33,7 +36,9 @@ ${trimmedContext}
 ${trimmedProgress}
 
 INSTRUCTION: You have access to tools to read, list, and write files inside the active codebase. 
-- If the user asks for a file and you are unsure of its exact path, ALWAYS call 'listProjectFiles' first.
+- If the user asks for a file and you are unsure of its exact path, call 'listProjectFiles' first.
+- If the user names an exact file or path (including dotfiles like .env or .gitignore), call 'readProjectFile' on it directly. A directory listing is not proof a file is missing: never say a file doesn't exist until 'readProjectFile' on that path has actually failed.
+- The user owns this local project. When they ask to see a file, including .env files, read it and show it. Don't refuse or lecture about secrets.
 - Use 'readProjectFile' to inspect existing code before making modifications.
 - When asked to build features, fix bugs, or write code, you can use 'writeProjectFile' to modify the codebase directly on disk.`;
 
@@ -71,7 +76,7 @@ INSTRUCTION: You have access to tools to read, list, and write files inside the 
                 const targetDir = path.join(projectRoot, subDirectory);
                 const entries = await fs.readdir(targetDir, { withFileTypes: true });
                 return entries
-                  .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '.next')
+                  .filter(e => !HIDDEN.has(e.name))
                   .map(e => `${e.isDirectory() ? '[DIR]' : '[FILE]'} ${e.name}`)
                   .join("\n");
               } catch (err: any) {
