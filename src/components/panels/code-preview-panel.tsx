@@ -13,6 +13,9 @@ const contentKey = (s: string) => {
   return `${s.length}:${h}`;
 };
 
+const GENERIC_NAME = /^snippet(\.|$)/i;
+const baseName = (p: string) => p.split(/[\\/]/).pop() || p;
+
 /**
  * Code preview — a layer above the memory panel (same right edge, wider, higher z-index).
  * Slides in when code is generated; close it to get back to the memory panel.
@@ -206,10 +209,9 @@ export function CodePreviewPanel({
         className='flex shrink-0 gap-1 overflow-x-auto border-b border-line px-3 pt-2'
       >
         {tabs.map((a) => {
-          const label =
-            a.kind === 'snippet'
-              ? `snippet ${++snippetN}${a.id.startsWith('pinned') ? ` · ${a.filename}` : ''}`
-              : a.filename;
+          const label = GENERIC_NAME.test(a.filename)
+            ? `snippet ${++snippetN}`
+            : baseName(a.path ?? a.filename);
           const on = a.id === activeId;
           return (
             <button

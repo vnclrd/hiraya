@@ -1,6 +1,7 @@
 "use client";
 
-import { memo } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
+import { codeKey, pathsByCode } from "@/lib/artifacts";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm"; // npm i remark-gfm  (tables + task lists)
 import { Check, FileCode, ExternalLink } from "lucide-react";
@@ -34,7 +35,7 @@ function CodeArtifactCard({ lang, code, detectedPath }: { lang: string; code: st
   const handleInspect = () => {
     window.dispatchEvent(
       new CustomEvent("hiraya-inspect-code", {
-        detail: { code, lang, filename: finalFilename },
+        detail: { code, lang, filename: finalFilename, path: detectedPath },
       })
     );
   };
@@ -66,8 +67,12 @@ const styled = (Tag: any, cls: string) =>
     return <Tag {...rest} className={`${cls} ${className ?? ""}`} />;
   };
 
-// Global tracker for the most recently seen file path string in the markdown stream
-let lastSeenFilepath: string | undefined = undefined;
+const CodePathsContext = createContext<Map<string, string>>(new Map());
+
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const detectedPath = useContext(CodePathsContext).get(codeKey(code));
+  return <CodeArtifactCard lang={lang} code={code} detectedPath={detectedPath} />;
+}
 
 const components: Components = {
   h1: styled("h1", "mt-5 mb-2 text-lg font-semibold tracking-tight text-fg first:mt-0"),
@@ -99,22 +104,11 @@ const components: Components = {
     const langMatch = /language-([a-zA-Z0-9_-]+)/.exec(className ?? "");
     const lang = langMatch ? langMatch[1] : "";
 
-    // If this is an inline code snippet containing a file path (like src/config/personas.ts),
-    // save it so the very next code block can use it as its filename!
-    if (!lang && !text.includes("\n") && (text.includes("/") || text.includes(".")) && text.length < 60) {
-      lastSeenFilepath = text;
+        if (!lang && !text.includes("\n")) {
       return <code className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-fg">{children}</code>;
     }
 
-    if (!lang && !text.includes("\n")) {
-      return <code className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-fg">{children}</code>;
-    }
-
-    // Capture and consume the tracked filepath
-    const currentPath = lastSeenFilepath;
-    lastSeenFilepath = undefined;
-
-    return <CodeArtifactCard lang={lang || "text"} code={text} detectedPath={currentPath} />;
+    return <CodeBlock lang={lang || "text"} code={text} />;
   },
   input: ({ type, checked }) =>
     type === "checkbox" ? (
@@ -123,11 +117,14 @@ const components: Components = {
 };
 
 export const Markdown = memo(function Markdown({ children, className = "" }: { children: string; className?: string }) {
+  const paths = useMemo(() => pathsByCode(children), [children]);
   return (
     <div className={`text-sm text-fg/90 ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {children}
-      </ReactMarkdown>
+      <CodePathsContext.Provider value={paths}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {children}
+        </ReactMarkdown>
+      </CodePathsContext.Provider>
     </div>
   );
 });
