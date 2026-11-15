@@ -40,7 +40,10 @@ INSTRUCTION: You have access to tools to read, list, and write files inside the 
 - If the user names an exact file or path (including dotfiles like .env or .gitignore), call 'readProjectFile' on it directly. A directory listing is not proof a file is missing: never say a file doesn't exist until 'readProjectFile' on that path has actually failed.
 - The user owns this local project. When they ask to see a file, including .env files, read it and show it. Don't refuse or lecture about secrets.
 - Use 'readProjectFile' to inspect existing code before making modifications.
-- When asked to build features, fix bugs, or write code, you can use 'writeProjectFile' to modify the codebase directly on disk.`;
+- When asked to build features, fix bugs, or write code, you can use 'writeProjectFile' to modify the codebase directly on disk.
+- Always call 'readProjectFile' on a file before overwriting it with 'writeProjectFile', and keep all UI code in it unchanged unless the user explicitly asked for a UI change.`;
+
+
 
   const candidates = getFallbackChain(persona.preferredModel);
 
@@ -110,7 +113,7 @@ INSTRUCTION: You have access to tools to read, list, and write files inside the 
 
           // NEW: Dynamic tool to create or overwrite code files in the active repository
           writeProjectFile: tool({
-            description: `Write or update code files in the ${projectSlug} repository. Use this to implement features, fix bugs, or create components directly.`,
+            description: `Write or update code files in the ${projectSlug} repository. You overwrite the whole file, so copy every existing line you were not asked to change, especially JSX, classes, and text.`,
             inputSchema: z.object({
               filePath: z.string().describe("Relative path from project root, e.g. 'src/components/AppHeader.tsx'"),
               content: z.string().describe("The complete file content to write"),

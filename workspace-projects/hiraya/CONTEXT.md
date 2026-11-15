@@ -152,3 +152,4 @@ Saves the transcript, summarizes via `generateText` (Completed / Decisions & Con
 - Styling: semantic tokens in `@theme` (`canvas`, `surface`, `raised`, `line`, `fg-*`); per-persona color through `--persona`; Tailwind 4 syntax (`bg-(--persona)/15`, `outline-hidden`).
 - API errors: JSON `{error}` for closeout; plain text 429 for chat when all providers are exhausted.
 - Path safety for memory files goes through `resolveSafeProjectPath` (slug sanitization) — **the code-reading tools do not use it** (see `PROGRESS.md`).
+- **[2026-11-15]** - Developer/User name: Miguel (addressed as Sir)
