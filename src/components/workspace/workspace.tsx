@@ -36,8 +36,8 @@ import { MemoryPanel } from '@/components/panels/memory-panel';
 import { CodePreviewPanel } from '@/components/panels/code-preview-panel';
 
 export function Workspace() {
-  const [view, setView] = useState<string>('general'); // "general" or a persona id — General is the landing view
-  const [slug, setSlug] = useState('sample-project'); // "" = no project (scratch space)
+  const [view, setView] = useState<string>('general');
+  const [slug, setSlug] = useState('');
   const [greeting, setGreeting] = useState('Welcome back');
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
