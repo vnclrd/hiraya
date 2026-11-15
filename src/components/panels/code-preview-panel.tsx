@@ -7,6 +7,12 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { Artifact } from '@/lib/artifacts';
 
+const contentKey = (s: string) => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return `${s.length}:${h}`;
+};
+
 /**
  * Code preview — a layer above the memory panel (same right edge, wider, higher z-index).
  * Slides in when code is generated; close it to get back to the memory panel.
@@ -30,26 +36,32 @@ export function CodePreviewPanel({
   const [copied, setCopied] = useState(false);
   const [displayed, setDisplayed] = useState('');
   const [typing, setTyping] = useState(false);
+
+  // Tracks unique code content / artifact identifiers that have already finished animating
   const animated = useRef<Set<string>>(new Set());
+  const ignoreOutside = useRef(false);
 
   // Close panel whenever user clicks outside of it
   useEffect(() => {
     if (!open) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+      if (ignoreOutside.current) return; // click came from a chat snippet card
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(event.target as Node)
+      ) {
         onClose();
       }
     };
 
-    // Tiny timeout buffer so the toggle button click doesn't instantly trigger close
     const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('click', handleClickOutside);
     }, 0);
 
     return () => {
       clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, [open, onClose]);
 
@@ -66,6 +78,10 @@ export function CodePreviewPanel({
         | { code: string; lang: string; filename: string }
         | undefined;
       if (!d) return;
+      ignoreOutside.current = true;
+      setTimeout(() => {
+        ignoreOutside.current = false;
+      }, 0);
       const norm = (c: string) => c.replace(/\r\n/g, '\n').trim();
       const match = artifacts.find((a) => norm(a.code) === norm(d.code));
       if (match) {
@@ -93,29 +109,39 @@ export function CodePreviewPanel({
   const code = active?.code ?? '';
   const activeId = active?.id;
 
-  // Typewriter reveal, once per artifact (faster for long files)
+  // Typewriter reveal, running exactly ONCE per unique file/artifact content
+  const animKey = contentKey(code);
+  const alreadyAnimated = animated.current.has(animKey);
+
   useEffect(() => {
-    if (!activeId) return;
-    if (animated.current.has(activeId)) {
+    if (!code || !open) return; // only animate while the panel is actually visible
+
+    const key = contentKey(code);
+    if (animated.current.has(key)) {
       setDisplayed(code);
       setTyping(false);
       return;
     }
+
     const step = Math.max(20, Math.ceil(code.length / 120));
     let i = 0;
     setTyping(true);
     setDisplayed('');
+
     const t = setInterval(() => {
       i += step;
       if (i >= code.length) {
         setDisplayed(code);
         setTyping(false);
-        animated.current.add(activeId);
+        animated.current.add(key);
         clearInterval(t);
-      } else setDisplayed(code.slice(0, i));
+      } else {
+        setDisplayed(code.slice(0, i));
+      }
     }, 15);
+
     return () => clearInterval(t);
-  }, [activeId, code]);
+  }, [code, open]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(code);
@@ -228,7 +254,8 @@ export function CodePreviewPanel({
               margin-right: 1rem;
               text-align: right;
               color: var(--color-fg-subtle, #6b7280);
-              border-right: 1px solid var(--color-line, rgba(255, 255, 255, 0.08));
+              border-right: 1px solid
+                var(--color-line, rgba(255, 255, 255, 0.08));
               user-select: none;
             }
           `}</style>
@@ -250,7 +277,7 @@ export function CodePreviewPanel({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             {...({} as any)}
           >
-            {displayed}
+            {alreadyAnimated ? code : displayed}
           </SyntaxHighlighter>
         </div>
       </div>

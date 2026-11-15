@@ -518,7 +518,9 @@ export function Workspace() {
             artifacts={artifacts}
             open={codeOpen && artifacts.length > 0}
             onClose={() => setCodeOpen(false)}
-            onRequestOpen={() => setCodeOpen(true)}
+            onRequestOpen={() => {
+              if (!codeOpen) setCodeOpen(true);
+            }}
             projectSlug={effSlug}
           />
         </>
