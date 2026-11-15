@@ -13,6 +13,7 @@ import {
   FileText,
   FolderGit2,
   Loader2,
+  PanelLeft,
   Plus,
   Square,
 } from 'lucide-react';
@@ -39,8 +40,21 @@ export function Workspace() {
   const [slug, setSlug] = useState('sample-project'); // "" = no project (scratch space)
   const [greeting, setGreeting] = useState('Welcome back');
   const [input, setInput] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [memOpen, setMemOpen] = useState(false); // memory slide-over (below xl; docked at xl+)
   const [codeOpen, setCodeOpen] = useState(false); // code preview layer above the memory panel
+
+  // Auto-hide sidebar on small screens (< 768px)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setSidebarOpen(false);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [wrapping, setWrapping] = useState(false);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(
     null,
@@ -352,8 +366,8 @@ export function Workspace() {
       }
     >
       <div
-        className={`rounded-2xl border border-line-strong bg-surface transition focus-within:border-(--persona)/60 focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--persona)_14%,transparent)] ${
-          landing ? 'p-1.5 shadow-2xl' : 'shadow-lg'
+        className={`flex items-end gap-2 rounded-2xl border border-line-strong bg-surface p-2 transition focus-within:border-(--persona)/60 focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--persona)_14%,transparent)] ${
+          landing ? 'shadow-2xl' : 'shadow-lg'
         }`}
       >
         <textarea
@@ -377,32 +391,16 @@ export function Workspace() {
               : `Ask ${bot.name} about ${slug || 'anything'}…`
           }
           aria-label='Message'
-          className={`block max-h-52 w-full resize-none bg-transparent px-4 pt-3 pb-1 outline-hidden placeholder:text-fg-subtle ${landing ? 'text-base' : 'text-sm'}`}
+          className={`block max-h-10 w-full resize-none bg-transparent px-3 py-2 outline-hidden placeholder:text-fg-subtle ${landing ? 'text-base' : 'text-sm'}`}
         />
-        <div className='flex items-center justify-between px-3 pb-2.5'>
-          <span className='text-[11px] text-fg-subtle'>
-            {landing ? (
-              <>
-                <kbd className='font-mono'>Enter</kbd> send ·{' '}
-                <kbd className='font-mono'>/</kbd> focus ·{' '}
-                <kbd className='font-mono'>⌥0–6</kbd> switch mode
-              </>
-            ) : (
-              <>
-                <kbd className='font-mono'>Enter</kbd> send ·{' '}
-                <kbd className='font-mono'>Shift+Enter</kbd> newline ·{' '}
-                <kbd className='font-mono'>Esc</kbd> stop ·{' '}
-                <kbd className='font-mono'>/wrap</kbd> end session
-              </>
-            )}
-          </span>
+        <div className='flex shrink-0 pb-0.5 pr-0.5'>
           {busy ? (
             <Tooltip label='Stop generating' hint='Esc' side='top'>
               <button
                 type='button'
                 onClick={() => stop()}
                 aria-label='Stop'
-                className='grid size-8 cursor-pointer place-items-center rounded-lg border border-line-strong text-fg transition hover:bg-raised'
+                className='grid size-8 cursor-pointer place-items-center rounded-xl border border-line-strong text-fg transition hover:bg-raised'
               >
                 <Square className='size-3.5 fill-current' />
               </button>
@@ -412,7 +410,7 @@ export function Workspace() {
               type='submit'
               disabled={!input.trim()}
               aria-label='Send'
-              className='grid size-8 cursor-pointer place-items-center rounded-lg bg-(--persona) text-canvas transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30'
+              className='grid size-8 cursor-pointer place-items-center rounded-xl bg-(--persona) text-canvas transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30'
             >
               <ArrowUp className='size-4' />
             </button>
@@ -423,14 +421,33 @@ export function Workspace() {
   );
 
   return (
-    <div style={accent(bot.accent)} className='flex h-dvh bg-canvas text-fg'>
-      <Sidebar view={view} onSelect={setView} />
+    <div style={accent(bot.accent)} className='flex h-dvh overflow-hidden bg-canvas text-fg'>
+      <div
+        className={`flex shrink-0 transition-all duration-300 ease-in-out ${
+          sidebarOpen ? 'w-64 translate-x-0 opacity-100' : 'w-0 -translate-x-full opacity-0 overflow-hidden'
+        }`}
+      >
+        <Sidebar view={view} onSelect={setView} />
+      </div>
 
       {/* ── Main ── */}
       <main className='ambient relative flex min-w-0 flex-1 flex-col'>
         {/* Header: identity | centered project dropdown | actions */}
         <header className='grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line bg-canvas/80 px-4 backdrop-blur'>
           <div className='flex min-w-0 items-center gap-3'>
+            <Tooltip
+              label={sidebarOpen ? 'Hide personas sidebar' : 'Show personas sidebar'}
+              side='bottom'
+            >
+              <button
+                type='button'
+                onClick={() => setSidebarOpen((o) => !o)}
+                aria-label='Toggle sidebar'
+                className='cursor-pointer rounded-md border border-line p-1.5 text-fg-muted transition hover:bg-raised hover:text-fg'
+              >
+                <PanelLeft className='size-4' />
+              </button>
+            </Tooltip>
             <Avatar bot={bot} />
             <div className='hidden min-w-0 leading-tight sm:block'>
               <div className='truncate text-sm font-semibold'>
