@@ -38,7 +38,71 @@ import { CodePreviewPanel } from '@/components/panels/code-preview-panel';
 export function Workspace() {
   const [view, setView] = useState<string>('general');
   const [slug, setSlug] = useState('');
-  const [greeting, setGreeting] = useState("Let's get started.");
+  const [userName, setUserName] = useState<string>('');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState('');
+  const [greeting, setGreeting] = useState('Good to see you');
+
+  // Helper to generate greetings with or without a name
+  const getGreetingText = (hour: number, name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return hour < 5
+        ? 'Burning the midnight oil'
+        : hour < 12
+          ? 'Good morning'
+          : hour < 18
+            ? 'Good afternoon'
+            : 'Good evening';
+    }
+    return hour < 5
+      ? `Burning the midnight oil, ${trimmedName}`
+      : hour < 12
+        ? `Good morning, ${trimmedName}`
+        : hour < 18
+          ? `Good afternoon, ${trimmedName}`
+          : `Good evening, ${trimmedName}`;
+  };
+
+  // Boot: load saved user name and set initial greeting
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('hiraya:project');
+      if (saved !== null) setSlug(sanitize(saved));
+      const savedName = localStorage.getItem('hiraya:username') || '';
+      setUserName(savedName);
+      setTempName(savedName);
+      
+      const resume = sessionStorage.getItem('hiraya:resume');
+      if (resume) {
+        sessionStorage.removeItem('hiraya:resume');
+        setView(resume);
+      }
+      handledWrites.current = new Set(
+        JSON.parse(sessionStorage.getItem('hiraya:writes') ?? '[]'),
+      );
+    } catch {}
+
+    const h = new Date().getHours();
+    const currentName = localStorage.getItem('hiraya:username') || '';
+    setGreeting(getGreetingText(h, currentName));
+  }, []);
+
+  const saveUserName = () => {
+    const trimmed = tempName.trim();
+    setUserName(trimmed);
+    try {
+      if (trimmed) {
+        localStorage.setItem('hiraya:username', trimmed);
+      } else {
+        localStorage.removeItem('hiraya:username');
+      }
+    } catch {}
+    const h = new Date().getHours();
+    setGreeting(getGreetingText(h, trimmed));
+    setIsEditingName(false);
+  };
+
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [memOpen, setMemOpen] = useState(false); // memory slide-over (below xl; docked at xl+)
@@ -79,10 +143,16 @@ export function Workspace() {
   } = useProjects();
 
   // Boot: restore last project, resume view after an auto-reload, time-based greeting, project list
+  // Boot: load saved project, view resume, handled writes, user name, and set initial greeting
   useEffect(() => {
     try {
       const saved = localStorage.getItem('hiraya:project');
       if (saved !== null) setSlug(sanitize(saved));
+      
+      const savedName = localStorage.getItem('hiraya:username') || '';
+      setUserName(savedName);
+      setTempName(savedName);
+
       const resume = sessionStorage.getItem('hiraya:resume');
       if (resume) {
         sessionStorage.removeItem('hiraya:resume');
@@ -94,35 +164,8 @@ export function Workspace() {
     } catch {}
 
     const h = new Date().getHours();
-    const name = 'Miguel';
-
-    // Claude-style randomized or time-tailored variations
-    const options =
-      h < 5
-        ? [
-            `Burning the midnight oil, ${name}`,
-            `Working late, ${name}`,
-            `Quiet hours, ${name}`,
-          ]
-        : h < 12
-          ? [
-              `Good morning, ${name}`,
-              `Ready for the day, ${name}`,
-              `Morning, ${name}`,
-            ]
-          : h < 18
-            ? [
-                `Good afternoon, ${name}`,
-                `Productive afternoon, ${name}`,
-                `Keeping the momentum going, ${name}`,
-              ]
-            : [
-                `Good evening, ${name}`,
-                `Winding down or building, ${name}`,
-                `Evening session, ${name}`,
-              ];
-    const selected = options[Math.floor(Math.random() * options.length)];
-    setGreeting(selected);
+    const currentName = localStorage.getItem('hiraya:username') || '';
+    setGreeting(getGreetingText(h, currentName));
   }, []);
   useEffect(() => {
     try {
@@ -618,9 +661,28 @@ export function Workspace() {
           <div className='flex min-h-0 flex-1 overflow-y-auto'>
             <div className='animate-rise m-auto w-full max-w-3xl px-4 py-10'>
               <div className='mb-8 text-center'>
-                <h2 className='bg-linear-to-r from-(--persona) to-fuchsia-400 bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-4xl'>
-                  {greeting}.
-                </h2>
+                <div className='flex items-center justify-center gap-2'>
+                  {isEditingName ? (
+                    <input
+                      type='text'
+                      value={tempName}
+                      autoFocus
+                      placeholder='Enter your name...'
+                      onChange={(e) => setTempName(e.target.value)}
+                      onBlur={saveUserName}
+                      onKeyDown={(e) => e.key === 'Enter' && saveUserName()}
+                      className='caret-(--persona) bg-linear-to-r from-(--persona) to-fuchsia-400 bg-clip-text text-3xl leading-none font-semibold tracking-tight text-transparent outline-none border-b border-(--persona) pb-1 text-center placeholder:text-fg-subtle sm:text-4xl'
+                    />
+                  ) : (
+                    <h2 
+                      onClick={() => { setTempName(userName); setIsEditingName(true); }}
+                      title='Click to add or change your name'
+                      className='cursor-pointer bg-linear-to-r from-(--persona) to-fuchsia-400 bg-clip-text text-3xl font-semibold tracking-tight text-transparent transition hover:opacity-80 sm:text-4xl'
+                    >
+                      {greeting}.
+                    </h2>
+                  )}
+                </div>
                 <p className='mt-2 text-xl text-fg-subtle sm:text-2xl'>
                   What are we building today?
                 </p>
