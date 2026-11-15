@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "ai";
 import { AlertTriangle, ArrowDown } from "lucide-react";
-import type { PersonaConfig } from "@/config/personas";
+import { HIRAYA_PERSONAS, type PersonaConfig } from "@/config/personas";
 import { useStickToBottom } from "@/hooks/use-stick-to-bottom";
 import { Avatar } from "@/components/ui/avatar";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -43,10 +43,18 @@ function PersonaIntro({ bot, onSend }: { bot: PersonaConfig; onSend: (t: string)
 }
 
 function UserBubble({ message }: { message: UIMessage }) {
+  // Messages handed over by a teammate carry { from } metadata; label them so they don't look typed by Sir
+  const from = (message.metadata as { from?: string } | undefined)?.from;
+  const body = from ? textOf(message).replace(/^\[Task from [^\]]+\]\n/, "") : textOf(message);
   return (
     <div className="animate-rise flex justify-end">
       <div className="max-w-[85%] rounded-2xl rounded-br-md border border-(--persona)/25 bg-(--persona)/10 px-4 py-2.5 text-sm whitespace-pre-wrap">
-        {textOf(message)}
+        {from && (
+          <div className="mb-1 text-[10px] font-semibold tracking-wider text-(--persona) uppercase">
+            Task from {HIRAYA_PERSONAS[from]?.name ?? from}
+          </div>
+        )}
+        {body}
       </div>
     </div>
   );

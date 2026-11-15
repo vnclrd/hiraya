@@ -1,4 +1,5 @@
 import { Check, Loader2 } from "lucide-react";
+import { HIRAYA_PERSONAS } from "@/config/personas";
 import { toolName } from "@/lib/tool-parts";
 
 /** Small "Running / Completed" pill for a tool call. Finished read/list calls are hidden to keep chat clean. */
@@ -12,6 +13,8 @@ export function ToolBadge({ part }: { part: any }) {
   if (name === "readProjectFile" && part.input?.filePath) action = `Reading ${part.input.filePath}`;
   else if (name === "writeProjectFile" && part.input?.filePath) action = `Writing ${part.input.filePath}`;
   else if (name === "listProjectFiles") action = "Listing directory";
+  else if (name === "delegateTask" && part.input?.to)
+    action = `Handing off to ${HIRAYA_PERSONAS[part.input.to]?.name ?? part.input.to}`;
   else if (part.input?.fileName) action = `Updating ${part.input.fileName}`;
 
   return (

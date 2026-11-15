@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { MessageSquare } from "lucide-react";
+import { Loader2, MessageSquare } from "lucide-react";
 import { GENERAL, PERSONAS } from "@/config/modes";
+import { HIRAYA_PERSONAS } from "@/config/personas";
+import type { Activity } from "@/hooks/use-office";
 import { Avatar } from "@/components/ui/avatar";
 import { accent } from "@/lib/accent";
 
@@ -14,11 +16,27 @@ type ItemProps = {
   title: string;
   subtitle: string;
   tooltip?: string;
+  badge?: ReactNode;
   onClick: () => void;
 };
 
+/** Status dot / spinner shown on a persona's row while a handed-off task runs or has finished. */
+function Badge({ a }: { a?: Activity }) {
+  if (!a) return null;
+  if (a.state === "working")
+    return <Loader2 aria-label="Working" className="size-3.5 shrink-0 animate-spin text-(--persona)" />;
+  if (a.state === "error")
+    return <span aria-label="Failed" className="size-2 shrink-0 rounded-full bg-red-400" />;
+  return (
+    <span aria-label="New result" className="relative flex size-2.5 shrink-0">
+      <span className="absolute inline-flex size-full animate-ping rounded-full bg-(--persona) opacity-60" />
+      <span className="relative inline-flex size-2.5 rounded-full bg-(--persona)" />
+    </span>
+  );
+}
+
 /** One row of the sidebar: same layout for General chat and every persona. */
-function NavItem({ accentColor, active, hotkey, leading, title, subtitle, tooltip, onClick }: ItemProps) {
+function NavItem({ accentColor, active, hotkey, leading, title, subtitle, tooltip, badge, onClick }: ItemProps) {
   return (
     <button
       type="button"
@@ -43,6 +61,7 @@ function NavItem({ accentColor, active, hotkey, leading, title, subtitle, toolti
         </span>
         <span className="mt-0.5 block truncate text-[11px] text-fg-muted">{subtitle}</span>
       </span>
+      {badge}
       <kbd className="shrink-0 font-mono text-[10px] text-fg-subtle tabular-nums">{hotkey}</kbd>
     </button>
   );
@@ -54,7 +73,16 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-export function Sidebar({ view, onSelect }: { view: string; onSelect: (id: string) => void }) {
+export function Sidebar({
+  view,
+  onSelect,
+  activity = {},
+}: {
+  view: string;
+  onSelect: (id: string) => void;
+  /** Badge state per persona id (working / unread / error) for the current project. */
+  activity?: Record<string, Activity | undefined>;
+}) {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
@@ -84,19 +112,24 @@ export function Sidebar({ view, onSelect }: { view: string; onSelect: (id: strin
 
         <SectionLabel>Personas</SectionLabel>
         <div className="space-y-0.5">
-          {PERSONAS.map((p, i) => (
-            <NavItem
-              key={p.id}
-              accentColor={p.accent}
-              active={p.id === view}
-              hotkey={`⌥${i + 1}`}
-              title={p.name}
-              subtitle={p.title}
-              tooltip={p.description}
-              onClick={() => onSelect(p.id)}
-              leading={<Avatar bot={p} />}
-            />
-          ))}
+          {PERSONAS.map((p, i) => {
+            const a = activity[p.id];
+            const from = a?.from ? (HIRAYA_PERSONAS[a.from]?.name ?? a.from) : null;
+            return (
+              <NavItem
+                key={p.id}
+                accentColor={p.accent}
+                active={p.id === view}
+                hotkey={`⌥${i + 1}`}
+                title={p.name}
+                subtitle={p.title}
+                tooltip={a?.task ? `Task from ${from}: ${a.task}` : p.description}
+                badge={<Badge a={a} />}
+                onClick={() => onSelect(p.id)}
+                leading={<Avatar bot={p} />}
+              />
+            );
+          })}
         </div>
       </nav>
 

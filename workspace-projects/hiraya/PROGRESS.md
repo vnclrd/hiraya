@@ -104,3 +104,9 @@ A single-page, local-first workspace. You pick a persona and a project folder na
   - **Completed:** Retrieved and outputted the contents of `src/config/personas.ts`, displaying the full configuration for all assistant personas (Hiraya, Toronto, Violet, Vince, Blue, Entropy, Emily).
   - **Decisions & Context:** Confirmed the structure of `PersonaConfig` and the definitions within `HIRAYA_PERSONAS`.
   - **Next Steps:** Await further instructions regarding persona updates or feature implementations.
+
+- **[2026-11-15]** - Added "// Test for Toronto" comment to src/hooks/use-office.ts as requested by Miguel (Sir).
+
+- **[2026-11-15]** Reviewed src/hooks/use-office.ts changes
+
+- **[2026-11-15]** Confirmed removal of test comments from src/hooks/use-office.ts

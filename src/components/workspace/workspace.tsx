@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Chat, useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type UIMessage } from 'ai';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { HIRAYA_PERSONAS } from '@/config/personas';
-import { GENERAL } from '@/config/modes';
+import { GENERAL, PERSONAS } from '@/config/modes';
 import { accent } from '@/lib/accent';
 import { sanitize } from '@/lib/slug';
 import { loadThread, saveThread, dropThread } from '@/lib/thread-storage';
@@ -14,6 +14,7 @@ import { useProjectMemory } from '@/hooks/use-project-memory';
 import { useProjects } from '@/hooks/use-projects';
 import { useUserName } from '@/hooks/use-user-name';
 import { useShortcuts } from '@/hooks/use-shortcuts';
+import { useOffice } from '@/hooks/use-office';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AppHeader } from '@/components/layout/app-header';
 import { PersonaStrip } from '@/components/layout/persona-strip';
@@ -34,7 +35,9 @@ export function Workspace() {
   const [memOpen, setMemOpen] = useState(false); // memory slide-over (below xl; docked at xl+)
   const [codeOpen, setCodeOpen] = useState(false); // code preview layer above the memory panel
   const [wrapping, setWrapping] = useState(false);
-  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(
+    null,
+  );
   const [modelUsed, setModelUsed] = useState<string | null>(null);
 
   const name = useUserName();
@@ -48,7 +51,11 @@ export function Workspace() {
   const bot = isGeneral ? GENERAL : (HIRAYA_PERSONAS[view] ?? GENERAL);
   const effSlug = slug || 'general';
   const mem = useProjectMemory(effSlug);
-  const { projects, loading: projectsLoading, reload: loadProjects } = useProjects();
+  const {
+    projects,
+    loading: projectsLoading,
+    reload: loadProjects,
+  } = useProjects();
 
   // Boot: restore last project, resume view after an auto-reload, and the writes already handled
   useEffect(() => {
@@ -89,18 +96,24 @@ export function Workspace() {
       }),
     [],
   );
-  const [threads] = useState(() => new Map<string, Chat<UIMessage>>());
   const key = `${effSlug}:${bot.id}`;
-  let chat = threads.get(key);
-  if (!chat) {
-    chat = new Chat<UIMessage>({
-      id: key,
-      transport,
-      onFinish: () => refreshRef.current(),
-    });
-    threads.set(key, chat);
-  }
-  const { messages, setMessages, sendMessage, status, error, stop, regenerate } = useChat({ chat });
+  // The "office": owns every persona's Chat so tasks can be handed off in the background
+  const office = useOffice({
+    activeKey: key,
+    transport,
+    onSettled: () => refreshRef.current(),
+    handledWrites,
+  });
+  const chat = office.getChat(effSlug, bot.id);
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    error,
+    stop,
+    regenerate,
+  } = useChat({ chat });
   const busy = status === 'submitted' || status === 'streaming';
   const landing = isGeneral && messages.length === 0;
   const artifacts = useMemo(() => extractArtifacts(messages), [messages]);
@@ -132,7 +145,10 @@ export function Workspace() {
     const p = pendingSend.current;
     if (!p || p.slug !== effSlug) return;
     pendingSend.current = null;
-    sendMessage({ text: p.text }, { body: { personaId: bot.id, projectSlug: effSlug } });
+    sendMessage(
+      { text: p.text },
+      { body: { personaId: bot.id, projectSlug: effSlug, hop: 0 } },
+    );
   }, [effSlug, bot.id, sendMessage]);
 
   const flash = (text: string, ok = true) => {
@@ -142,13 +158,18 @@ export function Workspace() {
 
   const wrap = async (clear = false) => {
     if (messages.length === 0 || wrapping) return;
-    if (!slug) return flash('Pick a project first to wrap into its PROGRESS.md', false);
+    if (!slug)
+      return flash('Pick a project first to wrap into its PROGRESS.md', false);
     setWrapping(true);
     try {
       const res = await fetch('/api/closeout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, projectSlug: slug, personaName: bot.name }),
+        body: JSON.stringify({
+          messages,
+          projectSlug: slug,
+          personaName: bot.name,
+        }),
       });
       if (!res.ok) throw new Error();
       lastWrapped.current.set(key, messages.length);
@@ -185,7 +206,9 @@ export function Workspace() {
       if (target && target !== effSlug) {
         pendingSend.current = { text, slug: target };
         setSlug(target);
-        flash(`Switched to ${target}${files?.[0] ? ` — ${files[0]} lives there` : ''}`);
+        flash(
+          `Switched to ${target}${files?.[0] ? ` — ${files[0]} lives there` : ''}`,
+        );
         return;
       }
     } catch (err) {
@@ -193,7 +216,10 @@ export function Workspace() {
     } finally {
       routing.current = false;
     }
-    sendMessage({ text }, { body: { personaId: bot.id, projectSlug: effSlug } });
+    sendMessage(
+      { text },
+      { body: { personaId: bot.id, projectSlug: effSlug, hop: 0 } },
+    );
   };
 
   const newChat = () => {
@@ -210,7 +236,13 @@ export function Workspace() {
 
   // Idle auto-wrap (30 min) — only once per unchanged conversation (prevents a repeat-wrap loop)
   useEffect(() => {
-    if (!canWrap || wrapping || busy || lastWrapped.current.get(key) === messages.length) return;
+    if (
+      !canWrap ||
+      wrapping ||
+      busy ||
+      lastWrapped.current.get(key) === messages.length
+    )
+      return;
     let timer: ReturnType<typeof setTimeout>;
     const arm = () => {
       clearTimeout(timer);
@@ -226,19 +258,27 @@ export function Workspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, wrapping, busy, canWrap, key]);
 
-  // Reload after new file writes (each tool call handled once; threads + view survive the reload)
+  // Reload after new file writes (each tool call handled once; threads + view survive the reload).
+  // Deferred while any persona is mid-task or this reply is still streaming, so a reload never kills a handoff chain.
+  const working = office.anyWorking;
   useEffect(() => {
-    const fresh = finishedWriteIds(messages).filter((id) => !handledWrites.current.has(id));
+    if (working || busy) return;
+    const fresh = finishedWriteIds(messages).filter(
+      (id) => !handledWrites.current.has(id),
+    );
     if (!fresh.length) return;
     fresh.forEach((id) => handledWrites.current.add(id));
     try {
-      sessionStorage.setItem('hiraya:writes', JSON.stringify([...handledWrites.current]));
+      sessionStorage.setItem(
+        'hiraya:writes',
+        JSON.stringify([...handledWrites.current]),
+      );
       sessionStorage.setItem('hiraya:resume', view);
     } catch {}
     saveThread(key, messages);
     const t = setTimeout(() => window.location.reload(), 1500);
     return () => clearTimeout(t);
-  }, [messages, view, key]);
+  }, [messages, view, key, working, busy]);
 
   useEffect(() => {
     composerRef.current?.focus();
@@ -248,7 +288,13 @@ export function Workspace() {
   const toggleCode = useCallback(() => setCodeOpen((o) => !o), []);
   useShortcuts({ busy, stop, setView, toggleMemory, toggleCode, composerRef });
 
-  const options = slug && !projects.includes(slug) ? [slug, ...projects] : projects;
+  const options =
+    slug && !projects.includes(slug) ? [slug, ...projects] : projects;
+
+  // Per-persona badge state for the sidebar (working / unread / error) in the current project
+  const activity = Object.fromEntries(
+    PERSONAS.map((p) => [p.id, office.activity[`${effSlug}:${p.id}`]]),
+  );
 
   const composer = (
     <Composer
@@ -260,13 +306,18 @@ export function Workspace() {
       landing={landing}
       inputRef={composerRef}
       placeholder={
-        landing ? 'Ask anything, or pick a persona below…' : `Ask ${bot.name} about ${slug || 'anything'}…`
+        landing
+          ? 'Ask anything, or pick a persona below…'
+          : `Ask ${bot.name} about ${slug || 'anything'}…`
       }
     />
   );
 
   return (
-    <div style={accent(bot.accent)} className='flex h-dvh overflow-hidden bg-canvas text-fg'>
+    <div
+      style={accent(bot.accent)}
+      className='flex h-dvh overflow-hidden bg-canvas text-fg'
+    >
       {/* Sidebar: fixed-width inside a collapsing wrapper, so content never squishes while animating */}
       <div
         inert={!sidebarOpen}
@@ -274,7 +325,7 @@ export function Workspace() {
           sidebarOpen ? 'w-64' : 'w-0'
         }`}
       >
-        <Sidebar view={view} onSelect={setView} />
+        <Sidebar view={view} onSelect={setView} activity={activity} />
       </div>
 
       <main className='ambient relative flex min-w-0 flex-1 flex-col'>
@@ -284,7 +335,12 @@ export function Workspace() {
           landing={landing}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
-          project={{ slug, options, loading: projectsLoading, onChange: setSlug }}
+          project={{
+            slug,
+            options,
+            loading: projectsLoading,
+            onChange: setSlug,
+          }}
           notice={notice}
           modelUsed={modelUsed}
           showNewChat={isGeneral && messages.length > 0}
@@ -293,7 +349,12 @@ export function Workspace() {
           artifactCount={artifacts.length}
           codeOpen={codeOpen}
           onToggleCode={toggleCode}
-          wrap={{ busy: wrapping, canWrap, hasProject: !!slug, onWrap: () => wrap(true) }}
+          wrap={{
+            busy: wrapping,
+            canWrap,
+            hasProject: !!slug,
+            onWrap: () => wrap(true),
+          }}
         />
 
         <PersonaStrip activeId={bot.id} onSelect={setView} />
@@ -328,7 +389,11 @@ export function Workspace() {
 
       {!landing && (
         <>
-          <MemoryPanel mem={mem} open={memOpen} onClose={() => setMemOpen(false)} />
+          <MemoryPanel
+            mem={mem}
+            open={memOpen}
+            onClose={() => setMemOpen(false)}
+          />
           <CodePreviewPanel
             artifacts={artifacts}
             open={codeOpen && artifacts.length > 0}
