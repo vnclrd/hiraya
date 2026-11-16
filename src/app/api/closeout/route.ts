@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateText, convertToModelMessages } from "ai";
-import { getFallbackChain, createRoutedModel, isRateLimitError, describeError } from "@/lib/server/llm-router";
+import { pickCandidate, isRateLimitError, describeError } from "@/lib/server/llm-router";
 import { appendProjectMarkdown, saveChatTranscript } from "@/lib/server/markdown-fs";
 
 export async function POST(req: Request) {
@@ -41,7 +41,7 @@ Keep it crisp, technical, and under 120 words. Do not include conversational fil
 
   // Default to Flash-Lite first to save your primary Flash quota for active coding.
   // The routed model shares the same quota tracking as /api/chat and fails over per request.
-  const model = createRoutedModel(getFallbackChain("gemini-3.5-flash-lite"));
+  const model = pickCandidate("gemini-3.5-flash-lite").model;
 
   try {
     const { text, response } = await generateText({
