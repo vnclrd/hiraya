@@ -100,3 +100,9 @@ A single-page, local-first workspace. You pick a persona and a project folder na
 
 - **[2026-11-14]** - Updated persona descriptions in `src/config/personas.ts` to be short, simple, and role-focused relative to their team titles.
 - **[2026-11-16]** - Implemented file attachments (.zip, .pdf, .jpg, .png) in the chat composer and Workspace send handler.
+
+- **[2026-11-16]** - Aligned composer container items (attach icon, textarea, send button) vertically using items-center.
+
+- **[2026-11-16]** - **[2026-11-16]** - Fixed the vertical alignment of the action buttons container in src/components/chat/composer.tsx by removing the pb-0.5 class.
+
+- **[2026-11-16]** [2026-11-16] Fixed the vertical alignment of the action buttons container in src/components/chat/composer.tsx by adding items-center to align with the rest of the flex container.

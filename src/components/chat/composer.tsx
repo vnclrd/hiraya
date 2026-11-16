@@ -191,7 +191,7 @@ export function Composer({ value, onChange, onSubmit, onStop, busy, landing, pla
         </div>
       )}
       <div
-        className={`flex items-end gap-2 rounded-2xl border border-line-strong bg-surface p-2 transition focus-within:border-(--persona)/60 focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--persona)_14%,transparent)] ${
+        className={`flex items-center gap-2 rounded-2xl border border-line-strong bg-surface p-2 transition focus-within:border-(--persona)/60 focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--persona)_14%,transparent)] ${
           landing ? "shadow-2xl" : "shadow-lg"
         }`}
       >
@@ -239,7 +239,7 @@ export function Composer({ value, onChange, onSubmit, onStop, busy, landing, pla
           aria-label="Message"
           className={`block max-h-52 w-full resize-none bg-transparent px-3 py-2 outline-hidden placeholder:text-fg-subtle ${landing ? "text-base" : "text-sm"}`}
         />
-        <div className="flex shrink-0 pr-0.5 pb-0.5">
+        <div className="flex shrink-0 items-center">
           {busy ? (
             <Tooltip label="Stop generating" hint="Esc" side="top">
               <button
