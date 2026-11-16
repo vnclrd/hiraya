@@ -107,12 +107,17 @@ ${
 
   const candidate = pickCandidate(persona.preferredModel);
 
+  const maxSteps = hop > 0 ? 5 : 8;
+
   const result = streamText({
     model: candidate.model,
     system: systemPrompt,
     messages: modelMessages,
     maxRetries: 0, // retries would also count against RPM; the gate handles pacing
-    stopWhen: stepCountIs(hop > 0 ? 5 : 8), // each step is one API request
+    stopWhen: stepCountIs(maxSteps), // each step is one API request
+    // On the last allowed step, forbid tools so the model must answer in text
+    prepareStep: ({ stepNumber }) =>
+      stepNumber >= maxSteps - 1 ? { toolChoice: 'none' as const } : undefined,
     // Server-side gate: reviewers never get writeProjectFile; only delegators get delegateTask
     activeTools: [
       'updateMarkdownFile',

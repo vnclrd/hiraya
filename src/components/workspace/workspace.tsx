@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, type FileUIPart } from 'ai';
 import { HIRAYA_PERSONAS } from '@/config/personas';
 import { GENERAL, PERSONAS } from '@/config/modes';
 import { accent } from '@/lib/accent';
@@ -18,7 +18,7 @@ import { useOffice } from '@/hooks/use-office';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AppHeader } from '@/components/layout/app-header';
 import { PersonaStrip } from '@/components/layout/persona-strip';
-import { Composer } from '@/components/chat/composer';
+import { Composer, type Attachment } from '@/components/chat/composer';
 import { ChatThread } from '@/components/chat/chat-thread';
 import { Landing } from '@/components/chat/landing';
 import { MemoryPanel } from '@/components/panels/memory-panel';
@@ -44,7 +44,7 @@ export function Workspace() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const handledWrites = useRef<Set<string>>(new Set());
   const lastWrapped = useRef<Map<string, number>>(new Map());
-  const pendingSend = useRef<{ text: string; slug: string } | null>(null);
+  const pendingSend = useRef<{ text: string; slug: string; files?: FileUIPart[] } | null>(null);
   const routing = useRef(false);
 
   const isGeneral = view === 'general';
@@ -88,6 +88,21 @@ export function Workspace() {
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
+        // Derive persona/project/hop from the chat id so regenerate() and retries send them too
+        prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
+          const i = id.lastIndexOf(':');
+          const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+          const hop = (lastUser?.metadata as { hop?: number } | undefined)?.hop ?? 0;
+          return {
+            body: {
+              id, messages, trigger, messageId,
+              projectSlug: id.slice(0, i),
+              personaId: id.slice(i + 1),
+              hop,
+              ...body, // explicit values from sendMessage still win
+            },
+          };
+        },
         fetch: async (input, init) => {
           const res = await fetch(input, init);
           setModelUsed(res.headers.get('X-Model-Used'));
@@ -146,7 +161,7 @@ export function Workspace() {
     if (!p || p.slug !== effSlug) return;
     pendingSend.current = null;
     sendMessage(
-      { text: p.text },
+      { text: p.text, files: p.files },
       { body: { personaId: bot.id, projectSlug: effSlug, hop: 0 } },
     );
   }, [effSlug, bot.id, sendMessage]);
@@ -188,9 +203,21 @@ export function Workspace() {
     }
   };
 
-  const send = async (text: string) => {
-    if (!text.trim() || busy || routing.current) return;
+  const send = async (text: string, attachments: Attachment[] = []) => {
+    if (!text.trim() && attachments.length === 0) return;
+    if (busy || routing.current) return;
     if (text.trim().toLowerCase() === '/wrap') return void wrap(true);
+
+    // Images travel as real file parts (already compressed in the composer)
+    const files: FileUIPart[] = attachments.map((a) => ({
+      type: 'file',
+      mediaType: a.mediaType,
+      filename: a.name,
+      url: a.url,
+    }));
+    const fullText =
+      text.trim() ||
+      `Please look at the attached image${attachments.length > 1 ? 's' : ''}.`;
 
     // Does this prompt name another project, or ask for a file that lives in one? If so, switch first.
     routing.current = true;
@@ -201,13 +228,13 @@ export function Workspace() {
         body: JSON.stringify({ text, current: effSlug }),
       });
       if (!res.ok) throw new Error(`resolve returned ${res.status}`);
-      const { switchTo, files } = await res.json();
+      const { switchTo, files: hits } = await res.json();
       const target = switchTo ? sanitize(switchTo) : '';
       if (target && target !== effSlug) {
-        pendingSend.current = { text, slug: target };
+        pendingSend.current = { text: fullText, slug: target, files };
         setSlug(target);
         flash(
-          `Switched to ${target}${files?.[0] ? ` — ${files[0]} lives there` : ''}`,
+          `Switched to ${target}${hits?.[0] ? ` — ${hits[0]} lives there` : ''}`,
         );
         return;
       }
@@ -217,7 +244,7 @@ export function Workspace() {
       routing.current = false;
     }
     sendMessage(
-      { text },
+      { text: fullText, files },
       { body: { personaId: bot.id, projectSlug: effSlug, hop: 0 } },
     );
   };
@@ -229,8 +256,8 @@ export function Workspace() {
     composerRef.current?.focus();
   };
 
-  const submit = () => {
-    send(input);
+  const submit = (attachments?: Attachment[]) => {
+    send(input, attachments);
     setInput('');
   };
 
