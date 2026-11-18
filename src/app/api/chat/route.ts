@@ -3,6 +3,7 @@ import {
   tool,
   convertToModelMessages,
   stepCountIs,
+  hasToolCall,
   type ToolSet,
 } from 'ai';
 import { z } from 'zod';
@@ -33,6 +34,9 @@ const MAX_TOTAL_READ_CHARS = 150_000; // per request, so tool results can't floo
 const HISTORY_WINDOW = 6; // messages from the chat thread sent to the model (the browser keeps the full thread for you)
 const MAX_CONTEXT_CHARS = 6000; // CONTEXT.md budget in the system prompt
 const MAX_PROGRESS_CHARS = 4000; // PROGRESS.md budget in the system prompt (newest entries)
+const MAX_PRELOAD_FILES = 3; // files named in a task that are loaded into the prompt up front
+const MAX_PRELOAD_CHARS = 30_000; // per pre-loaded file; larger files are paged with readProjectFile
+const MAX_PRELOAD_TOTAL = 60_000; // across all pre-loaded files
 const MAX_DROP_RATIO = 0.1; // writeProjectFile may drop at most 10% of existing lines...
 const MIN_DROP_ALLOWED = 5; // ...or 5 lines, whichever is larger, without explicit confirmation
 
@@ -63,12 +67,7 @@ function compactMessage(m: any) {
   const parts = (m.parts ?? []).flatMap((p: any) => {
     if (p.type === 'text') return p.text?.trim() ? [p] : [];
     if (p.type === 'file') {
-      return [
-        {
-          type: 'text',
-          text: `[attachment omitted: ${p.filename ?? p.mediaType}]`,
-        },
-      ];
+      return [{ type: 'text', text: `[attachment omitted: ${p.filename ?? p.mediaType}]` }];
     }
     return [];
   });
@@ -128,6 +127,9 @@ export async function POST(req: Request) {
   >();
   let readChars = 0;
 
+  // Files the persona changes in this reply; logged to PROGRESS.md automatically when the reply ends
+  const changedFiles = new Set<string>();
+
   const delegateTools: ToolSet = canDelegate
     ? {
         delegateTask: tool({
@@ -145,7 +147,7 @@ export async function POST(req: Request) {
               .describe('Relative paths the teammate should look at'),
           }),
           execute: async ({ to }) =>
-            `Handed off to ${to}. Do not do their part; tell Sir briefly and stop.`,
+            `Handed off to ${to}.`,
         }),
       }
     : {};
@@ -157,22 +159,55 @@ export async function POST(req: Request) {
   const rawMarkdown = await readProjectMarkdown(projectSlug);
 
   // Both files are appended to, so the newest entries are at the end: keep the tail of each
-  const trimmedContext = fitMarkdown(
-    rawMarkdown.context,
-    MAX_CONTEXT_CHARS,
-    2000,
-  );
-  const trimmedProgress = fitMarkdown(
-    rawMarkdown.progress,
-    MAX_PROGRESS_CHARS,
-    500,
-  );
+  const trimmedContext = fitMarkdown(rawMarkdown.context, MAX_CONTEXT_CHARS, 2000);
+  const trimmedProgress = fitMarkdown(rawMarkdown.progress, MAX_PROGRESS_CHARS, 500);
 
   const trimmedMessages = buildHistory(messages);
   // Tool calls that never got a result (e.g. a stopped reply) would also break Gemini's turn order
   const modelMessages = await convertToModelMessages(trimmedMessages, {
     ignoreIncompleteToolCalls: true,
   });
+
+  // Pre-load the files named in a delegated task ("Files: a, b" on the last line of the brief), so the
+  // persona starts with them in full instead of spending steps on listing and reading.
+  const lastUserMsg = [...messages].reverse().find((m: { role: string }) => m.role === 'user');
+  const lastUserText: string = (lastUserMsg?.parts ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((p: any) => p.type === 'text')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((p: any) => p.text)
+    .join('\n');
+  const named: string[] =
+    lastUserText
+      .match(/\n\nFiles: ([^\n]+)\s*$/)?.[1]
+      .split(',')
+      .map((f) => f.trim())
+      .filter(Boolean)
+      .slice(0, MAX_PRELOAD_FILES) ?? [];
+
+  let preloaded = '';
+  for (const rel of named) {
+    try {
+      const full = resolveSafe(projectRoot, rel);
+      const buf = await fs.readFile(full);
+      if (buf.includes(0) || buf.length > MAX_PRELOAD_CHARS || preloaded.length + buf.length > MAX_PRELOAD_TOTAL) {
+        continue; // binary or large: the persona pages through it with readProjectFile
+      }
+      const text = buf.toString('utf-8');
+      const lines = text.split('\n');
+      // Counts as fully read, so the overwrite guard doesn't force a second read
+      readState.set(full, {
+        totalLines: lines.length,
+        covered: new Set(lines.map((_, i) => i + 1)),
+      });
+      preloaded += `\n--- ${rel} (complete file) ---\n${text}\n`;
+    } catch {
+      // wrong path from the delegator: the persona can still list/read normally
+    }
+  }
+  const preloadedBlock = preloaded
+    ? `\n=== PRE-LOADED FILES (already read in full; do not read them again) ===${preloaded}`
+    : '';
 
   const systemPrompt = `${persona.systemInstruction}
 
@@ -182,12 +217,12 @@ ${trimmedContext}
 
 --- PROGRESS.md (Summary) ---
 ${trimmedProgress}
-
+${preloadedBlock}
 INSTRUCTION: You have access to tools to read, list, and write files inside the active codebase. 
 - If the user asks for a file and you are unsure of its exact path, call 'listProjectFiles' first.
 - If the user names an exact file or path (including dotfiles like .env or .gitignore), call 'readProjectFile' on it directly. A directory listing is not proof a file is missing: never say a file doesn't exist until 'readProjectFile' on that path has actually failed.
 - The user owns this local project. When they ask to see a file, including .env files, read it and show it. Don't refuse or lecture about secrets.
-- Your memory of earlier work is CONTEXT.md and PROGRESS.md above; only the last few chat messages are included, and earlier tool results are not. Re-read files you need instead of relying on the chat, and record decisions or finished milestones that later sessions need with 'updateMarkdownFile'.\n- Use 'readProjectFile' to inspect existing code before making modifications. Large files are returned in chunks: if a result ends with [MORE], call 'readProjectFile' again with the offset it gives until you have read the whole file.
+- Work efficiently: you have few tool rounds. Files named in a task are pre-loaded above when present, so do not list or read them again. Call independent tools together in the same step. Changes you make to files are logged to PROGRESS.md automatically, so use 'updateMarkdownFile' only for decisions or finished milestones, and put no date in the entry.\n- Your memory of earlier work is CONTEXT.md and PROGRESS.md above; only the last few chat messages are included, and earlier tool results are not. Re-read files you need instead of relying on the chat, and record decisions or finished milestones that later sessions need with 'updateMarkdownFile'.\n- Use 'readProjectFile' to inspect existing code before making modifications. Large files are returned in chunks: if a result ends with [MORE], call 'readProjectFile' again with the offset it gives until you have read the whole file.
 ${
   persona.readOnly
     ? '- You cannot write or modify code files, and you must never try. Report findings, designs and suggestions in your reply.'
@@ -195,7 +230,7 @@ ${
 }
 ${
   canDelegate
-    ? `- Work that belongs to a teammate (${persona.canDelegateTo!.join(', ')}) MUST be handed over by calling the 'delegateTask' tool. Never do their part yourself.\n- Never say you have instructed, assigned, or handed work to a teammate unless 'delegateTask' was actually called in this reply and returned successfully. If it was not called, say so honestly.`
+    ? `- Work that belongs to a teammate (${persona.canDelegateTo!.join(', ')}) MUST be handed over by calling the 'delegateTask' tool. Never do their part yourself.\n- Finish your own work (reads, edits) first. Then hand off by writing one short sentence to Sir and calling 'delegateTask' in that same step; the call ends your turn, so write nothing after it. Never say you handed work to a teammate unless you call 'delegateTask' in that step.`
     : ''
 }`;
 
@@ -210,12 +245,26 @@ ${
     // Writers copy code back verbatim, so remove sampling randomness for them
     ...(persona.readOnly ? {} : { temperature: 0 }),
     maxRetries: 0, // retries would also count against RPM; the gate handles pacing
-    stopWhen: stepCountIs(maxSteps), // each step is one API request
-    // On the last allowed step, forbid tools so the model must answer in text
+    // Each step is one API request. A handoff ends the turn: the persona has nothing left to do after delegating.
+    stopWhen: [stepCountIs(maxSteps), hasToolCall('delegateTask')],
+    // On the last allowed step offer no tools at all, so the model can only answer in text
     prepareStep: ({ stepNumber }) =>
       stepNumber >= maxSteps - 1
         ? { toolChoice: 'none' as const, activeTools: [] }
         : undefined,
+    // File changes are logged for the persona, so it doesn't spend a step (and a bad date) on it
+    onFinish: async () => {
+      if (!changedFiles.size) return;
+      try {
+        await appendProjectMarkdown(
+          projectSlug,
+          'PROGRESS.md',
+          `${persona.name} changed ${[...changedFiles].join(', ')}`,
+        );
+      } catch {
+        // logging is best-effort
+      }
+    },
     // Server-side gate: reviewers never get write/edit tools; only delegators get delegateTask
     activeTools: [
       'updateMarkdownFile',
@@ -305,8 +354,7 @@ ${
             let size = 0;
             while (
               end < total &&
-              (end === offset - 1 ||
-                size + lines[end].length + 1 <= MAX_READ_CHARS)
+              (end === offset - 1 || size + lines[end].length + 1 <= MAX_READ_CHARS)
             ) {
               size += lines[end].length + 1;
               end++;
@@ -338,14 +386,10 @@ ${
         inputSchema: z.object({
           filePath: z
             .string()
-            .describe(
-              "Relative path from project root, e.g. 'src/lib/utils.ts'",
-            ),
+            .describe("Relative path from project root, e.g. 'src/lib/utils.ts'"),
           oldString: z
             .string()
-            .describe(
-              'Exact existing text to replace. Must occur exactly once.',
-            ),
+            .describe('Exact existing text to replace. Must occur exactly once.'),
           newString: z.string().describe('The replacement text'),
         }),
         execute: async ({ filePath, oldString, newString }) => {
@@ -354,8 +398,7 @@ ${
             const content = await fs.readFile(fullPath, 'utf-8');
 
             // Files with Windows line endings: let the model's \n snippets still match
-            const crlf =
-              content.includes('\r\n') && !oldString.includes('\r\n');
+            const crlf = content.includes('\r\n') && !oldString.includes('\r\n');
             const from = crlf ? oldString.replace(/\n/g, '\r\n') : oldString;
             const to = crlf ? newString.replace(/\n/g, '\r\n') : newString;
 
@@ -368,14 +411,11 @@ ${
             }
 
             // Function form of replace avoids "$&"-style substitution in code
-            await fs.writeFile(
-              fullPath,
-              content.replace(from, () => to),
-              'utf-8',
-            );
+            await fs.writeFile(fullPath, content.replace(from, () => to), 'utf-8');
 
             // The file changed under any earlier read; require a fresh read before a full overwrite
             readState.delete(fullPath);
+            changedFiles.add(filePath);
             return `Edited ${filePath}`;
           } catch (err: any) {
             return `Error editing file at '${filePath}': ${err.message}`;
@@ -442,6 +482,7 @@ ${
               covered: new Set(written.map((_, i) => i + 1)),
             });
 
+            changedFiles.add(filePath);
             return `Successfully wrote and updated file: ${filePath}`;
           } catch (err: any) {
             return `Error writing file at '${filePath}': ${err.message}`;
